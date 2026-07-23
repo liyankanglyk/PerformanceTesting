@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>速购商城 - 性能测试系统</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header class="header">
+    <div class="logo">速购商城</div>
+    <div class="user-info">
+        <span id="usernameDisplay"></span>
+        <button class="btn btn-sm btn-danger" onclick="logout()">退出</button>
+    </div>
+</header>
+
+<div class="container">
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('goods')">商品列表</div>
+        <div class="tab" onclick="switchTab('orders')">我的订单</div>
+    </div>
+
+    <div class="search-bar">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" id="searchInput" placeholder="搜索商品名称..." onkeydown="if(event.key==='Enter')doSearch()" oninput="toggleClear()">
+        <span class="search-clear" id="searchClear" onclick="clearSearch()">&times;</span>
+    </div>
+
+    <!-- Goods Panel -->
+    <div id="goodsPanel" class="goods-grid"></div>
+
+    <!-- Orders Panel -->
+    <div id="ordersPanel" style="display:none;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr><th>订单编号</th><th>商品ID</th><th>金额</th><th>时间</th><th>状态</th></tr>
+                </thead>
+                <tbody id="ordersBody"></tbody>
+            </table>
+            <div class="empty" id="ordersEmpty" style="display:none;">暂无订单</div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+if (!isLoggedIn()) { window.location.replace('/login.html'); }
+if (isAdmin()) { window.location.replace('/admin.html'); }
+
+var currentTab = 'goods';
+document.getElementById('usernameDisplay').textContent = getUsername();
+loadGoods();
+
+function logout() { clearSession(); window.location.href = '/login.html'; }
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(function(t, i) {
+        t.classList.toggle('active', (tab === 'goods' && i === 0) || (tab === 'orders' && i === 1));
+    });
+    var input = document.getElementById('searchInput');
+    if (tab === 'goods') {
+        input.placeholder = '搜索商品名称...';
+        document.getElementById('goodsPanel').style.display = 'grid';
+        document.getElementById('ordersPanel').style.display = 'none';
+    } else {
+        input.placeholder = '搜索订单编号...';
+        document.getElementById('goodsPanel').style.display = 'none';
+        document.getElementById('ordersPanel').style.display = 'block';
+    }
+    input.value = '';
+    doSearch();
+}
+
+function doSearch() {
+    if (currentTab === 'goods') loadGoods(); else loadOrders();
+}
+
+function toggleClear() {
+    document.getElementById('searchClear').classList.toggle('visible', document.getElementById('searchInput').value.length > 0);
+}
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchClear').classList.remove('visible');
+    document.getElementById('searchInput').focus();
+    doSearch();
+}
+
+async function loadGoods() {
+    var keyword = document.getElementById('searchInput').value.trim();
+    var url = '/goods/list';
+    if (keyword) url += '?keyword=' + encodeURIComponent(keyword);
+    var data = await apiGet(url);
+    var panel = document.getElementById('goodsPanel');
+    if (data.code !== 200 || !data.data || data.data.length === 0) {
+        panel.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无商品</div>';
+        return;
+    }
+    panel.innerHTML = data.data.map(function(g) {
+        var stockClass = g.stock < 10 ? ' stock low' : ' stock';
+        return '<div class="goods-card">' +
+            '<div class="goods-name">' + esc(g.goodsName) + '</div>' +
+            '<div class="goods-info">' +
+                '<span class="price">' + g.price + '</span>' +
+                '<span class="' + stockClass + '">库存: ' + g.stock + '</span>' +
+            '</div>' +
+            '<button class="btn btn-primary" onclick="buy(' + g.id + ')">立即购买</button>' +
+        '</div>';
+    }).join('');
+}
+
+async function buy(goodsId) {
+    var data = await apiPost('/order/buy', { goodsId: goodsId });
+    if (data.code === 200) { toast('下单成功', 'success'); loadGoods(); }
+    else { toast(data.msg || '下单失败', 'error'); }
+}
+
+async function loadOrders() {
+    var keyword = document.getElementById('searchInput').value.trim();
+    var url = '/order/list';
+    if (keyword) url += '?keyword=' + encodeURIComponent(keyword);
+    var data = await apiGet(url);
+    var tbody = document.getElementById('ordersBody');
+    var empty = document.getElementById('ordersEmpty');
+    if (data.code !== 200 || !data.data || data.data.length === 0) {
+        tbody.innerHTML = ''; empty.style.display = 'block'; return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = data.data.map(function(o) {
+        var s = o.status === 1 ? '<span class="status-badge paid">已支付</span>' : '<span class="status-badge unpaid">未支付</span>';
+        return '<tr><td><code>' + o.orderNo + '</code></td><td>' + o.goodsId + '</td><td>¥' + o.payPrice + '</td><td>' + new Date(o.createTs).toLocaleString('zh-CN') + '</td><td>' + s + '</td></tr>';
+    }).join('');
+}
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+</body>
+</html>

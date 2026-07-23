@@ -1,0 +1,41 @@
+DROP TABLE IF EXISTS operation_log;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS goods;
+DROP TABLE IF EXISTS `user`;
+
+CREATE TABLE `user` (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(100) NOT NULL,
+    role INT NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE goods (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    goods_name VARCHAR(200) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock INT NOT NULL DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_no VARCHAR(64) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL,
+    goods_id BIGINT NOT NULL,
+    pay_price DECIMAL(10,2) NOT NULL,
+    create_ts BIGINT NOT NULL,
+    status INT NOT NULL DEFAULT 0,
+    INDEX idx_user_id (user_id),
+    INDEX idx_goods_id (goods_id)
+);
+
+CREATE TABLE operation_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    admin_id BIGINT NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    detail VARCHAR(500) DEFAULT '',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);

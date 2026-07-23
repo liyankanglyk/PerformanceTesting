@@ -1,0 +1,200 @@
+/* ========== Admin Layout ========== */
+.admin-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ========== Sidebar ========== */
+.sidebar {
+    width: 220px;
+    background: #001529;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.sidebar-logo {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    padding: 20px 0 4px;
+    letter-spacing: 2px;
+}
+
+.sidebar-sub {
+    font-size: 12px;
+    text-align: center;
+    color: rgba(255,255,255,0.5);
+    padding-bottom: 20px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 12px;
+}
+
+.nav-item {
+    display: block;
+    padding: 10px 16px;
+    color: rgba(255,255,255,0.7);
+    text-decoration: none;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.1);
+}
+
+.nav-item.active {
+    color: #fff;
+    background: var(--primary);
+}
+
+.sidebar-footer {
+    padding: 16px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ========== Main Content ========== */
+.main-content {
+    flex: 1;
+    background: var(--bg);
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.panel-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--text);
+}
+
+.toolbar {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+}
+
+/* ========== Status Cards ========== */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.status-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    text-align: center;
+}
+
+.status-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* ========== Modal ========== */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    width: 420px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+
+.modal h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.modal .form-group {
+    margin-bottom: 16px;
+}
+
+.modal .form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.modal .form-group input,
+.modal .form-group select {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.modal .form-group input:focus,
+.modal .form-group select:focus {
+    border-color: var(--primary);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+/* ========== Links ========== */
+a.danger-link {
+    color: var(--danger);
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 160px;
+    }
+    .sidebar-logo {
+        font-size: 16px;
+    }
+    .main-content {
+        padding: 12px;
+    }
+    .status-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+    .modal {
+        width: 90%;
+    }
+}

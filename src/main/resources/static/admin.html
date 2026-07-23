@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 速购商城</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+<div class="admin-layout">
+    <aside class="sidebar">
+        <div class="sidebar-logo">速购商城</div>
+        <div class="sidebar-sub">管理后台</div>
+        <nav class="sidebar-nav">
+            <a class="nav-item active" data-panel="dashboard" onclick="switchPanel('dashboard')">系统概览</a>
+            <a class="nav-item" data-panel="users" onclick="switchPanel('users')">用户管理</a>
+            <a class="nav-item" data-panel="goods" onclick="switchPanel('goods')">商品管理</a>
+            <a class="nav-item" data-panel="orders" onclick="switchPanel('orders')">订单管理</a>
+            <a class="nav-item" data-panel="logs" onclick="switchPanel('logs')">操作日志</a>
+        </nav>
+        <div class="sidebar-footer">
+            <span id="adminName"></span>
+            <button class="btn btn-sm" onclick="logout()" style="background:rgba(255,255,255,0.2);color:#fff;margin-top:8px;width:100%;">退出登录</button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+
+        <!-- Dashboard -->
+        <div id="panel-dashboard" class="panel">
+            <h2 class="panel-title">系统概览</h2>
+            <div class="status-grid" id="statusGrid">加载中...</div>
+        </div>
+
+        <!-- Users -->
+        <div id="panel-users" class="panel" style="display:none;">
+            <h2 class="panel-title">用户管理</h2>
+            <div class="toolbar">
+                <div class="search-bar" style="margin-bottom:0;">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="userSearch" placeholder="搜索用户名..." onkeydown="if(event.key==='Enter')loadUsers()" oninput="toggleClear('userSearch','userClear')">
+                    <span class="search-clear" id="userClear" onclick="clearSearch('userSearch','userClear',loadUsers)">&times;</span>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="showUserModal()">+ 新增用户</button>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>
+                    <tbody id="usersBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Goods -->
+        <div id="panel-goods" class="panel" style="display:none;">
+            <h2 class="panel-title">商品管理</h2>
+            <div class="toolbar">
+                <div class="search-bar" style="margin-bottom:0;">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="goodsSearch" placeholder="搜索商品名称..." onkeydown="if(event.key==='Enter')loadAdminGoods()" oninput="toggleClear('goodsSearch','goodsClear')">
+                    <span class="search-clear" id="goodsClear" onclick="clearSearch('goodsSearch','goodsClear',loadAdminGoods)">&times;</span>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="showGoodsModal()">+ 新增商品</button>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>ID</th><th>商品名称</th><th>单价</th><th>库存</th><th>创建时间</th><th>操作</th></tr></thead>
+                    <tbody id="goodsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Orders -->
+        <div id="panel-orders" class="panel" style="display:none;">
+            <h2 class="panel-title">订单管理</h2>
+            <div class="toolbar">
+                <div class="search-bar" style="margin-bottom:0;">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="orderSearch" placeholder="搜索订单编号..." onkeydown="if(event.key==='Enter')loadAdminOrders()" oninput="toggleClear('orderSearch','orderClear')">
+                    <span class="search-clear" id="orderClear" onclick="clearSearch('orderSearch','orderClear',loadAdminOrders)">&times;</span>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>订单编号</th><th>用户ID</th><th>商品ID</th><th>金额</th><th>时间</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody id="adminOrdersBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div id="panel-logs" class="panel" style="display:none;">
+            <h2 class="panel-title">操作日志</h2>
+            <div class="toolbar">
+                <div class="search-bar" style="margin-bottom:0;">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="logSearch" placeholder="搜索用户名或操作..." onkeydown="if(event.key==='Enter')loadLogs()" oninput="toggleClear('logSearch','logClear')">
+                    <span class="search-clear" id="logClear" onclick="clearSearch('logSearch','logClear',loadLogs)">&times;</span>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>ID</th><th>操作人</th><th>操作类型</th><th>详情</th><th>时间</th></tr></thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- User Modal -->
+<div class="modal-overlay" id="userModal" style="display:none;">
+    <div class="modal">
+        <h3 id="userModalTitle">新增用户</h3>
+        <div class="form-group"><label>用户名</label><input type="text" id="uUsername"></div>
+        <div class="form-group"><label>密码</label><input type="password" id="uPassword" placeholder="留空则不修改"></div>
+        <div class="form-group"><label>角色</label><select id="uRole"><option value="0">普通用户</option><option value="1">管理员</option></select></div>
+        <input type="hidden" id="uId">
+        <div class="modal-actions">
+            <button class="btn btn-sm" onclick="closeUserModal()" style="background:#f5f5f5;">取消</button>
+            <button class="btn btn-primary btn-sm" onclick="saveUser()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Goods Modal -->
+<div class="modal-overlay" id="goodsModal" style="display:none;">
+    <div class="modal">
+        <h3 id="goodsModalTitle">新增商品</h3>
+        <div class="form-group"><label>商品名称</label><input type="text" id="gName"></div>
+        <div class="form-group"><label>单价</label><input type="number" step="0.01" id="gPrice"></div>
+        <div class="form-group"><label>库存</label><input type="number" id="gStock"></div>
+        <input type="hidden" id="gId">
+        <div class="modal-actions">
+            <button class="btn btn-sm" onclick="closeGoodsModal()" style="background:#f5f5f5;">取消</button>
+            <button class="btn btn-primary btn-sm" onclick="saveGoods()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+if (!isLoggedIn() || !isAdmin()) { window.location.replace('/login.html'); }
+document.getElementById('adminName').textContent = getUsername();
+loadDashboard();
+
+// ==================== Helpers ====================
+function toggleClear(inputId, clearId) {
+    document.getElementById(clearId).classList.toggle('visible', document.getElementById(inputId).value.length > 0);
+}
+function clearSearch(inputId, clearId, loadFn) {
+    document.getElementById(inputId).value = '';
+    document.getElementById(clearId).classList.remove('visible');
+    loadFn();
+}
+
+// ==================== Panel Switching ====================
+function switchPanel(name) {
+    document.querySelectorAll('.panel').forEach(function(p) { p.style.display = 'none'; });
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    document.getElementById('panel-' + name).style.display = 'block';
+    document.querySelector('[data-panel="' + name + '"]').classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+    else if (name === 'users') loadUsers();
+    else if (name === 'goods') loadAdminGoods();
+    else if (name === 'orders') loadAdminOrders();
+    else if (name === 'logs') loadLogs();
+}
+
+// ==================== Dashboard ====================
+async function loadDashboard() {
+    var data = await apiGet('/admin/status');
+    var grid = document.getElementById('statusGrid');
+    if (data.code !== 200) { grid.innerHTML = '<div class="empty">加载失败</div>'; return; }
+    var s = data.data;
+    var uptime = fmtUp(s.uptime);
+    var heapUsed = fmtBytes(s.heapUsed);
+    var heapMax = fmtBytes(s.heapMax);
+    var cards = [
+        {l:'运行时间', v:uptime},
+        {l:'CPU核心数', v:s.availableProcessors},
+        {l:'活跃线程', v:s.threadCount + ' / 峰值 ' + s.peakThreadCount},
+        {l:'堆内存', v:heapUsed + ' / ' + heapMax},
+        {l:'非堆内存', v:fmtBytes(s.nonHeapUsed)},
+        {l:'可用处理器', v:s.availableProcessors + ' 核'}
+    ];
+    grid.innerHTML = cards.map(function(c) {
+        return '<div class="status-card"><div class="status-value">' + c.v + '</div><div class="status-label">' + c.l + '</div></div>';
+    }).join('');
+}
+function fmtBytes(b) { if (!b) return '0 B'; var k=1024, s=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
+function fmtUp(ms) { var s=Math.floor(ms/1000), d=Math.floor(s/86400); s%=86400; var h=Math.floor(s/3600); s%=3600; var m=Math.floor(s/60); return (d?d+'d ':'')+h+'h '+m+'m'; }
+
+// ==================== Users ====================
+async function loadUsers() {
+    var kw = document.getElementById('userSearch').value.trim();
+    var url = '/admin/users';
+    if (kw) url += '?keyword=' + encodeURIComponent(kw);
+    var data = await apiGet(url);
+    var tbody = document.getElementById('usersBody');
+    if (data.code !== 200) return;
+    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">无匹配用户</td></tr>'; return; }
+    tbody.innerHTML = data.data.map(function(u) {
+        var t = u.role === 1 ? '<span class="status-badge paid">管理员</span>' : '<span class="status-badge unpaid">用户</span>';
+        return '<tr><td>'+u.id+'</td><td>'+esc(u.username)+'</td><td>'+t+'</td><td>'+(u.createTime||'')+'</td>'+
+            '<td><a href="javascript:void(0)" onclick="editUser('+u.id+',\''+esc(u.username)+'\','+u.role+')">编辑</a> '+
+            '<a href="javascript:void(0)" class="danger-link" onclick="deleteUser('+u.id+')">删除</a></td></tr>';
+    }).join('');
+}
+function showUserModal() {
+    document.getElementById('userModalTitle').textContent='新增用户'; document.getElementById('uId').value='';
+    document.getElementById('uUsername').value=''; document.getElementById('uPassword').value='';
+    document.getElementById('uPassword').placeholder='请输入密码'; document.getElementById('uRole').value='0';
+    document.getElementById('userModal').style.display='flex';
+}
+function editUser(id, name, role) {
+    document.getElementById('userModalTitle').textContent='编辑用户'; document.getElementById('uId').value=id;
+    document.getElementById('uUsername').value=name; document.getElementById('uPassword').value='';
+    document.getElementById('uPassword').placeholder='留空则不修改密码'; document.getElementById('uRole').value=role;
+    document.getElementById('userModal').style.display='flex';
+}
+function closeUserModal() { document.getElementById('userModal').style.display='none'; }
+async function saveUser() {
+    var id=document.getElementById('uId').value;
+    var body={username:document.getElementById('uUsername').value.trim(), password:document.getElementById('uPassword').value, role:parseInt(document.getElementById('uRole').value)};
+    if (!body.username) { toast('请输入用户名','error'); return; }
+    if (!id && !body.password) { toast('请输入密码','error'); return; }
+    var data = id ? await apiPut('/admin/users/'+id, body) : await apiPost('/admin/users', body);
+    if (data.code===200) { toast(id?'更新成功':'创建成功','success'); closeUserModal(); loadUsers(); }
+    else { toast(data.msg||'操作失败','error'); }
+}
+async function deleteUser(id) {
+    if (!confirm('确认删除该用户？')) return;
+    var data = await apiDelete('/admin/users/'+id);
+    if (data.code===200) { toast('删除成功','success'); loadUsers(); }
+    else { toast(data.msg||'删除失败','error'); }
+}
+
+// ==================== Goods ====================
+async function loadAdminGoods() {
+    var kw = document.getElementById('goodsSearch').value.trim();
+    var url = '/goods/list';
+    if (kw) url += '?keyword=' + encodeURIComponent(kw);
+    var data = await apiGet(url);
+    var tbody = document.getElementById('goodsBody');
+    if (data.code !== 200) return;
+    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">无匹配商品</td></tr>'; return; }
+    tbody.innerHTML = data.data.map(function(g) {
+        return '<tr><td>'+g.id+'</td><td>'+esc(g.goodsName)+'</td><td>¥'+g.price+'</td><td>'+g.stock+'</td><td>'+(g.createTime||'')+'</td>'+
+            '<td><a href="javascript:void(0)" onclick="editGoods('+g.id+',\''+esc(g.goodsName)+'\','+g.price+','+g.stock+')">编辑</a> '+
+            '<a href="javascript:void(0)" class="danger-link" onclick="deleteGoods('+g.id+')">删除</a></td></tr>';
+    }).join('');
+}
+function showGoodsModal() {
+    document.getElementById('goodsModalTitle').textContent='新增商品'; document.getElementById('gId').value='';
+    document.getElementById('gName').value=''; document.getElementById('gPrice').value=''; document.getElementById('gStock').value='';
+    document.getElementById('goodsModal').style.display='flex';
+}
+function editGoods(id, name, price, stock) {
+    document.getElementById('goodsModalTitle').textContent='编辑商品'; document.getElementById('gId').value=id;
+    document.getElementById('gName').value=name; document.getElementById('gPrice').value=price; document.getElementById('gStock').value=stock;
+    document.getElementById('goodsModal').style.display='flex';
+}
+function closeGoodsModal() { document.getElementById('goodsModal').style.display='none'; }
+async function saveGoods() {
+    var id=document.getElementById('gId').value;
+    var body={goodsName:document.getElementById('gName').value.trim(), price:parseFloat(document.getElementById('gPrice').value), stock:parseInt(document.getElementById('gStock').value)};
+    if (!body.goodsName || isNaN(body.price) || isNaN(body.stock)) { toast('请完整填写','error'); return; }
+    var data = id ? await apiPut('/admin/goods/'+id, body) : await apiPost('/admin/goods', body);
+    if (data.code===200) { toast(id?'更新成功':'创建成功','success'); closeGoodsModal(); loadAdminGoods(); }
+    else { toast(data.msg||'操作失败','error'); }
+}
+async function deleteGoods(id) {
+    if (!confirm('确认删除该商品？')) return;
+    var data = await apiDelete('/admin/goods/'+id);
+    if (data.code===200) { toast('删除成功','success'); loadAdminGoods(); }
+    else { toast(data.msg||'删除失败','error'); }
+}
+
+// ==================== Orders ====================
+async function loadAdminOrders() {
+    var kw = document.getElementById('orderSearch').value.trim();
+    var url = '/admin/orders';
+    if (kw) url += '?keyword=' + encodeURIComponent(kw);
+    var data = await apiGet(url);
+    var tbody = document.getElementById('adminOrdersBody');
+    if (data.code !== 200) return;
+    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">无匹配订单</td></tr>'; return; }
+    tbody.innerHTML = data.data.map(function(o) {
+        var s = o.status===1?'<span class="status-badge paid">已支付</span>':'<span class="status-badge unpaid">未支付</span>';
+        var act = o.status===0?'<a href="javascript:void(0)" onclick="payOrder('+o.id+')">标记支付</a>':'-';
+        return '<tr><td><code>'+o.orderNo+'</code></td><td>'+o.userId+'</td><td>'+o.goodsId+'</td><td>¥'+o.payPrice+'</td><td>'+new Date(o.createTs).toLocaleString('zh-CN')+'</td><td>'+s+'</td><td>'+act+'</td></tr>';
+    }).join('');
+}
+async function payOrder(id) {
+    var data = await apiPut('/admin/orders/'+id+'/pay', {});
+    if (data.code===200) { toast('已标记支付','success'); loadAdminOrders(); }
+    else { toast(data.msg,'error'); }
+}
+
+// ==================== Logs ====================
+async function loadLogs() {
+    var kw = document.getElementById('logSearch').value.trim();
+    var url = '/admin/logs';
+    if (kw) url += '?keyword=' + encodeURIComponent(kw);
+    var data = await apiGet(url);
+    var tbody = document.getElementById('logsBody');
+    if (data.code !== 200) return;
+    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">无匹配日志</td></tr>'; return; }
+    tbody.innerHTML = data.data.map(function(l) {
+        return '<tr><td>'+l.id+'</td><td>'+esc(l.username)+'</td><td><code>'+l.action+'</code></td><td>'+esc(l.detail||'')+'</td><td>'+(l.createTime||'')+'</td></tr>';
+    }).join('');
+}
+
+function logout() { clearSession(); window.location.href = '/login.html'; }
+function esc(s) { var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+</script>
+</body>
+</html>
