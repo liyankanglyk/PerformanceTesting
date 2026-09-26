@@ -109,8 +109,8 @@
    配合下面的小内边距 + 16px 字号，卡片整体比原来（minmax 220px / padding 24px / 24px 字号）紧凑得多。 */
 .status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 12px;
 }
 
 /* 运行时指标都是短数字，不需要 24px 内边距 + 24px 大字号：收紧到信息条尺寸 */
@@ -118,24 +118,24 @@
     background: var(--card-bg);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 10px 12px;
+    padding: 14px 16px;
     text-align: center;
     min-width: 0;               /* 网格列里允许收缩，配合下面 ellipsis */
 }
 
 .status-value {
-    font-size: 16px;
+    font-size: 19px;
     font-weight: 700;
     color: var(--primary);
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .status-label {
-    font-size: 12px;
-    line-height: 1.35;
+    font-size: 12.5px;
+    line-height: 1.4;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -498,8 +498,8 @@ tbody a[data-act].danger-link:hover {
 .metric-grid {
     display: grid;
     /* 与 JVM 卡片同一套节奏：自动排布，不写死一行几个 */
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 12px;
 }
 
 /* 卡片既可能是 div 也可能是 a（可点跳转），两者外观必须一致 */
@@ -512,7 +512,7 @@ a.metric-card {
     border: 1px solid var(--border, #f0f0f0);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 12px 14px;
+    padding: 14px 16px;
     color: inherit;
     text-decoration: none;
     cursor: default;
@@ -532,7 +532,7 @@ a.metric-card.is-link:hover {
 .metric-value {
     font-size: 19px;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.35;
     color: var(--text-color, #1f2329);
     white-space: nowrap;
     overflow: hidden;
@@ -540,15 +540,16 @@ a.metric-card.is-link:hover {
 }
 
 .metric-label {
-    font-size: 13px;
+    font-size: 12.5px;
+    line-height: 1.4;
     color: var(--text-secondary);
     margin-top: 2px;
 }
 
 .metric-sub {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
-    margin-top: 4px;
+    margin-top: 6px;
     word-break: break-all;
 }
 
@@ -562,8 +563,8 @@ a.metric-card.is-link:hover {
     border: 1px solid var(--border, #f0f0f0);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 10px 14px;
-    margin-bottom: 10px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
 }
 
 .heap-line {
