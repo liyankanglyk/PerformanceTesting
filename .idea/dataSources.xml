@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="performance_testing@localhost" uuid="828ab472-cba9-4951-a560-27dfd6fc22bc">
+    <data-source source="LOCAL" name="@localhost" uuid="43cf12a7-2471-444a-88f2-60622eb39689">
       <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
-      <imported>true</imported>
+      <remarks>8.0</remarks>
       <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
-      <jdbc-url>jdbc:mysql://localhost:3308/performance_testing</jdbc-url>
+      <jdbc-url>jdbc:mysql://localhost:3380</jdbc-url>
       <jdbc-additional-properties>
         <property name="com.intellij.clouds.kubernetes.db.host.port" />
         <property name="com.intellij.clouds.kubernetes.db.enabled" value="false" />
