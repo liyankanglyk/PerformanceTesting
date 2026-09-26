@@ -1,0 +1,105 @@
+# ===================================================================
+# 构建产物：必须忽略（target/ 里有 30MB+ 的可执行 jar）
+# ===================================================================
+target/
+build/
+nbdist/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# Maven 版本管理与打包中间文件
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# ===================================================================
+# 编译产物与运行日志
+# ===================================================================
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.log
+logs/
+log/
+nohup.out
+*.stackdump
+
+# JVM 崩溃 / 线程快照
+hs_err_pid*
+replay_pid*
+
+# ===================================================================
+# IDE：本仓库已跟踪少量共享的 .idea 配置（compiler.xml / misc.xml 等），
+# 所以只忽略“机器本地”那部分，不整体忽略 .idea/
+# ===================================================================
+*.iml
+*.iws
+.idea/workspace.xml
+.idea/shelf/
+.idea/tasks.xml
+.idea/dictionaries/
+.idea/httpRequests/
+.idea/dataSources.local.xml
+.idea/dataSources/
+.idea/fastRequest/
+.idea/modules.xml
+.idea/remote-targets.xml
+.idea/remoteTargets.xml
+.idea/assetWizardSettings.xml
+.idea/copilot.data.migration.agent.xml
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# ===================================================================
+# 本地覆盖配置（想改 db.init-mode、数据源口令时放这里，不要提交）
+# ===================================================================
+application-local.properties
+application-*.local.properties
+*.local.yml
+.env
+.env.local
+
+# ===================================================================
+# 压测结果与临时数据
+# ===================================================================
+*.jtl
+result/
+results/
+jmeter-results/
+jmeter.log
+*.heapdump
+*.h2.db
+
+# ===================================================================
+# 临时脚本与备份（改代码时容易顺手丢在仓库根目录）
+# ===================================================================
+*.orig
+*.rej
+*.bak
+*.tmp
+*~
+.patch.py
+patch_*.py
+patch_*.js
+fe[0-9].py
+h[0-9].py
+docs[0-9].py
+docs_*.py
+commit-msg.txt
+
+# ===================================================================
+# 操作系统
+# ===================================================================
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
