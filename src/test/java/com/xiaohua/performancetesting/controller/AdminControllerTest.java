@@ -324,6 +324,76 @@ class AdminControllerTest {
     }
 
     @Test
+    @DisplayName("新增商品：与已有商品同名直接 400，不落库也不记日志")
+    void createGoods_duplicateName() throws Exception {
+        Goods exists = new Goods();
+        exists.setId(7L);
+        exists.setGoodsName("鼠标");
+        when(goodsService.getOne(any(), eq(false))).thenReturn(exists);
+
+        mvc.perform(admin(post("/api/admin/goods").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"goodsName\":\"鼠标\",\"price\":99.90,\"stock\":1}")))
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("goods name already exists"));
+
+        verify(goodsService, never()).save(any(Goods.class));
+        verify(logService, never()).log(any(), any(), eq("CREATE_GOODS"), any());
+    }
+
+    @Test
+    @DisplayName("新增商品：并发抢同一名字时由唯一索引兜底，仍然是 400 而不是 500")
+    void createGoods_duplicateFromDatabaseWin() throws Exception {
+        // 先查没有、写入时撞索引：应用层的检查在并发下不可靠，这条测的就是兜底分支
+        when(goodsService.getOne(any(), eq(false))).thenReturn(null);
+        when(goodsService.save(any(Goods.class)))
+                .thenThrow(new org.springframework.dao.DuplicateKeyException("dup"));
+
+        mvc.perform(admin(post("/api/admin/goods").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"goodsName\":\"新商品\",\"price\":1.00,\"stock\":1}")))
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("goods name already exists"));
+    }
+
+    @Test
+    @DisplayName("编辑商品：改名撞上别人的商品名返回 400，不会把 500 抛给前端")
+    void updateGoods_renameCollides() throws Exception {
+        Goods db = new Goods();
+        db.setId(5L);
+        db.setGoodsName("旧名称");
+        db.setPrice(new BigDecimal("100.00"));
+        db.setStock(3);
+        when(goodsService.getById(5L)).thenReturn(db);
+
+        Goods other = new Goods();
+        other.setId(9L);
+        other.setGoodsName("鼠标");
+        when(goodsService.getOne(any(), eq(false))).thenReturn(other);
+
+        mvc.perform(admin(put("/api/admin/goods/5").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"goodsName\":\"鼠标\"}")))
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("goods name already exists"));
+        verify(goodsService, never()).updateById(any(Goods.class));
+    }
+
+    @Test
+    @DisplayName("编辑商品：名字没改（查到的就是自己）不该被当成重名拒绝")
+    void updateGoods_sameNameOnSelfIsAllowed() throws Exception {
+        Goods db = new Goods();
+        db.setId(5L);
+        db.setGoodsName("鼠标");
+        db.setPrice(new BigDecimal("100.00"));
+        db.setStock(3);
+        when(goodsService.getById(5L)).thenReturn(db);
+        when(goodsService.getOne(any(), eq(false))).thenReturn(db);
+        when(goodsService.updateById(any(Goods.class))).thenReturn(true);
+
+        mvc.perform(admin(put("/api/admin/goods/5").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"goodsName\":\"鼠标\",\"stock\":8}")))
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
     @DisplayName("商品：只把库存改成 0 是合法的部分更新")
     void updateGoods_stockZeroOnly() throws Exception {
         Goods db = new Goods();

@@ -1098,7 +1098,7 @@ POST /api/admin/db/reset?confirm=RESET&mode=full
 | 压测进行中千万别调 | 会 `TRUNCATE` 正在写入的 `orders`，本轮数据当场作废；并发保护只防「两次重置交叉」，不防「重置撞上业务写入」 |
 | JMeter | 该接口不要放进线程组（`confirm=RESET` 是给人的，不是给脚本的）。若一定要重置后再压测，放在 setUp Thread Group 里单次调用 |
 | 中文乱码 | 脚本固定按 **UTF-8** 读取（`DatabaseInitService.SCRIPT_ENCODING`）。历史上没指定编码时，中文 Windows（GBK 平台默认字符集）会把脚本里的 UTF-8 字节按 GBK 解码，商品名变成「鑻规灉 iPhone 16 Pro Max」。若你已有这样一个库，执行一次系统重置即可恢复 |
-| 存储引擎 | 现有库四张表是 `ENGINE = MyISAM`（服务端默认引擎不是 InnoDB），字符集是 `utf8`(mb3) 而非 `utf8mb4`。**影响**：`POST /api/order/buy` 上的 `@Transactional` 回滚不会真正生效（库存已扣、插订单失败时不会退回）；防超卖仍然成立，因为扣库存是单语句条件 `UPDATE`。想要真回滚需把表改成 InnoDB |
+| 存储引擎 | 初始化脚本 `performance_testing.sql` 已把四张表统一为 `ENGINE = InnoDB` + `utf8mb4`（早期转储是 MyISAM + utf8/mb3）。**为什么重要**：MyISAM 不支持事务，`POST /api/order/buy` 的 `@Transactional` 回滚不会生效（库存已扣、插订单失败时不会退回）；防超卖两者都成立，因为扣库存是单语句条件 `UPDATE`。老库可 `ALTER TABLE ... ENGINE = InnoDB` 原地迁移（见 README 的迁移 SQL），或直接执行系统重置重建 |
 
 **curl 示例：**
 ```bash
@@ -1114,7 +1114,7 @@ curl -X POST 'http://localhost:6060/api/admin/db/reset?mode=full&confirm=RESET' 
 | POST/PUT `/admin/users` | username、password 必填且不超列宽（50/100）；role 只能 0/1；密码传空串 = 不修改 | 400 |
 | DELETE `/admin/users/{id}` | 不能删自己；不能删最后一个管理员；有订单的用户拒绝删除 | 500 |
 | PUT `/admin/users/{id}` | 不能自降级；不能使系统失去最后一个管理员 | 500 |
-| POST/PUT `/admin/goods` | goodsName 必填（≤200）；price ≥ 0 且 ≤ 99999999.99 且最多两位小数；stock ≥ 0 | 400 |
+| POST/PUT `/admin/goods` | goodsName 必填（≤200）且不可与已有商品重复（库上有 `goods_name` 唯一索引，编辑改名同样校验；重名返回 `400 goods name already exists`）；price ≥ 0 且 ≤ 99999999.99 且最多两位小数；stock ≥ 0 | 400 |
 | DELETE `/admin/goods/{id}` | 有订单的商品拒绝删除 | 500 |
 | PUT `/order/pay/{orderNo}` | 只能付自己的单；orderNo 白名单 `[0-9a-zA-Z-]{8,64}`；条件更新 0→1 幂等 | 400/403/404/500 |
 | `POST /user/logout` | 需要有效 Token（写审计日志，不使 Token 失效） | 401 |

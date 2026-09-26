@@ -46,8 +46,9 @@ import java.util.List;
  *   <li>不能删除当前登录账号自己（cannot delete your own account）</li>
  *   <li>不能把自己的管理员角色去掉（cannot remove admin role from your own account）</li>
  *   <li>用户名下还有订单时不能删用户，商品还有订单时不能删商品，要先删订单</li>
+ *   <li>系统里必须至少留一个管理员（at least one admin account is required）：
+ *       自己是唯一管理员时删不掉也降不掉，对别人的管理员账号也一样卡 countAdmins() &lt;= 1</li>
  * </ul>
- * 注意没有“必须留一个管理员”这种规则：库里可以只剩你自己，删自己是唯一会被挡住的情况。
  *
  * <p>口令按项目最初的实现原样入库（明文，见 User#password），这里不做任何摘要转换。
  * 也就是说创建/改密码接口要传口令原文，别把登录用的 MD5(口令 + ts) 摘要存进去，
@@ -165,7 +166,7 @@ public class AdminController {
         return Result.ok("created", user);
     }
 
-    /** 请求体里没填的字段不动；改密与改角色共用这一个入口，去掉自己管理员角色会被拒。 */
+    /** 请求体里没填的字段不动；改密与改角色共用这一个入口。去掉自己的管理员角色、或把最后一个管理员降级都会被拒。 */
     @Operation(
         summary = "编辑用户",
         description = """
@@ -218,7 +219,7 @@ public class AdminController {
         return Result.ok("updated", null);
     }
 
-    /** 不能删当前登录账号；名下还有订单时要求先清订单。 */
+    /** 不能删当前登录账号，也不能把系统里最后一个管理员删掉；名下还有订单时要求先清订单。 */
     @Operation(
         summary = "删除用户",
         description = """
@@ -265,28 +266,37 @@ public class AdminController {
         return Result.ok(PageResult.of(pg));
     }
 
-    /** 商品名唯一，重复会返回失败；价格为 BigDecimal，别传字符串以外的格式。 */
+    /** 商品名唯一（库上有 goods_name 唯一索引），重名返回 400；价格为 BigDecimal，多余小数位会被 400 拒掉而不是静默四舍五入。 */
     @Operation(
         summary = "新增商品",
         description = """
-            创建新商品。校验：goodsName 必填、price >= 0、stock >= 0。
+            创建新商品。校验：goodsName 必填、price >= 0（最多两位小数）、stock >= 0，
+            且 goodsName 不能与已有商品重复（应用层先查 + 数据库唯一索引兜底）。
 
             请求体示例：`{"goodsName":"笔记本电脑","price":5999.00,"stock":50}`
             """
     )
     @ApiResponse(responseCode = "200", description = "创建成功")
-    @ApiResponse(responseCode = "400", description = "参数非法")
+    @ApiResponse(responseCode = "400", description = "参数非法 / 商品名已存在")
     @PostMapping(value = "/goods", consumes = "application/json")
     public Result<?> createGoods(@RequestBody Goods goods, HttpServletRequest request) {
         String err = validateGoods(goods, false);
         if (err != null) return Result.fail(400, err);
 
+        String goodsName = goods.getGoodsName().trim();
+        if (findGoodsByName(goodsName) != null) return Result.fail(400, "goods name already exists");
+
         goods.setId(null);
-        goods.setGoodsName(goods.getGoodsName().trim());
+        goods.setGoodsName(goodsName);
         // 统一成两位小数：否则请求里的 5 / 5.0 / 5.00 会原样回显，与库里 DECIMAL(10,2) 和日志不一致
         goods.setPrice(goods.getPrice().setScale(2, RoundingMode.HALF_UP));
         goods.setCreateTime(LocalDateTime.now());
-        goodsService.save(goods);
+        try {
+            goodsService.save(goods);
+        } catch (DuplicateKeyException e) {
+            // 并发新增同名商品时由 goods_name 唯一索引兜底，不让它变成 500 的 record already exists
+            return Result.fail(400, "goods name already exists");
+        }
 
         logService.log(getAdminId(request), getAdminName(request), "CREATE_GOODS",
                 "新增商品 #" + goods.getId() + " " + goods.getGoodsName()
@@ -294,13 +304,13 @@ public class AdminController {
         return Result.ok("created", goods);
     }
 
-    /** 只更新传入的字段；库存直接覆盖，不做增量调整（要加减库存请传最终值）。 */
+    /** 只更新传入的字段；库存直接覆盖，不做增量调整（要加减库存请传最终值）。改名撞上已有商品时返回 400。 */
     @Operation(
         summary = "编辑商品",
         description = "更新商品信息（名称、价格、库存）。字段为空时不更新该字段。请求体示例：`{\"goodsName\":\"笔记本电脑\",\"price\":4999.00,\"stock\":30}`"
     )
     @ApiResponse(responseCode = "200", description = "更新成功")
-    @ApiResponse(responseCode = "400", description = "参数非法")
+    @ApiResponse(responseCode = "400", description = "参数非法 / 新名称与其它商品重复")
     @ApiResponse(responseCode = "500", description = "商品不存在")
     @PutMapping(value = "/goods/{id}", consumes = "application/json")
     public Result<?> updateGoods(@PathVariable Long id, @RequestBody Goods goods, HttpServletRequest request) {
@@ -313,10 +323,21 @@ public class AdminController {
         if (err != null) return Result.fail(400, err);
 
         goods.setId(id);
-        if (goods.getGoodsName() != null) goods.setGoodsName(goods.getGoodsName().trim());
+        if (goods.getGoodsName() != null) {
+            goods.setGoodsName(goods.getGoodsName().trim());
+            // 改名撞别人的商品名：不先查就会发到数据库抛异常，变成无人能懂的 500
+            Goods sameName = findGoodsByName(goods.getGoodsName());
+            if (sameName != null && !sameName.getId().equals(id)) {
+                return Result.fail(400, "goods name already exists");
+            }
+        }
         if (goods.getPrice() != null) goods.setPrice(goods.getPrice().setScale(2, RoundingMode.HALF_UP));
         goods.setCreateTime(null);
-        if (!goodsService.updateById(goods) && goodsService.getById(id) == null) return Result.fail("goods not found");
+        try {
+            if (!goodsService.updateById(goods) && goodsService.getById(id) == null) return Result.fail("goods not found");
+        } catch (DuplicateKeyException e) {
+            return Result.fail(400, "goods name already exists");
+        }
 
         List<String> changes = new ArrayList<>();
         String newName = goods.getGoodsName();
@@ -510,6 +531,14 @@ public class AdminController {
     /** 按登录名精确查一个用户，没有则 null。getOne 传 false 表示多条也不抛异常。 */
     private User findByUsername(String username) {
         return userService.getOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username), false);
+    }
+
+    /**
+     * 按商品名精确查一个商品，没有则 null。配合 goods_name 唯一索引使用，
+     * 命中时调用方回 400 goods name already exists，而不是让数据库异常变成 500。
+     */
+    private Goods findGoodsByName(String goodsName) {
+        return goodsService.getOne(new LambdaQueryWrapper<Goods>().eq(Goods::getGoodsName, goodsName), false);
     }
 
     /** 按指定列统计某账号/某商品名下的订单数，用于删除保护。列做成参数是为了用户和商品复用同一条 count。 */

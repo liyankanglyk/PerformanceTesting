@@ -159,6 +159,7 @@ var MSG_ZH = {
     'password too long (max 100)': '密码长度不能超过 100',
     'role must be 0 or 1': '角色只能是 0（普通用户）或 1（管理员）',
     'username already exists': '用户名已存在',
+    'goods name already exists': '商品名已存在（商品名不允许重复）',
     'invalid request body': '请求体不是合法 JSON',
     'nothing to update: password or role is required': '请至少填写密码或角色',
     'nothing to update: goodsName, price or stock is required': '请至少填写商品名称、单价或库存',

@@ -24,8 +24,9 @@ public class Goods {
     private Long id;
 
     /**
-     * 商品名。**库上没有唯一索引**（只有主键）：重名由应用层先查一次拦下，
-     * 300 并发同时新增同名商品是插得进去的 —— 不要以为数据库会兜底。
+     * 商品名。**库上有唯一索引 goods_name**（utf8mb4_unicode_ci 排序，大小写不敏感），
+     * 所以重名既由应用层先查一次拦下，也由数据库兜底（见 AdminController#createGoods 的
+     * DuplicateKeyException 分支），300 并发同时新增同名商品只有一个能进去。
      */
     private String goodsName;
 

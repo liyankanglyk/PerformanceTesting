@@ -135,7 +135,7 @@ UPDATE goods SET stock = stock - 1 WHERE id = ? AND stock > 0
 | 新增/编辑用户 | username、password 必填且不超列宽；role 只能是 0 或 1；用户名不可重复、不可修改 |
 | 删除用户 | 不能删除当前登录账号；不能删除最后一个管理员；该用户已有订单时拒绝删除 |
 | 编辑用户角色 | 不能取消自己的管理员角色；不能让系统失去最后一个管理员 |
-| 新增/编辑商品 | goodsName 必填；price ≥ 0、≤ DECIMAL(10,2) 上限且最多两位小数；stock ≥ 0 |
+| 新增/编辑商品 | goodsName 必填且不重复（库上有 `goods_name` 唯一索引；重名返回 400 `goods name already exists`，并发抢名由索引兜底）；price ≥ 0、≤ DECIMAL(10,2) 上限且最多两位小数；stock ≥ 0 |
 | 删除商品 | 该商品已有订单时拒绝删除（避免订单悬空 goods_id） |
 | 订单删除 | `DELETE /orders/{id}` 删单条；`DELETE /orders?userId=\|goodsId=` 批量清理并返回条数——上面两行保护规则的出路，管理页会引导一步完成 |
 | 操作日志 | 每条都记录“操作人 + 目标 ID/名称 + 变更前后”（如 `单价 100.00→66.60；库存 3→0`），不记明文密码；失败的变更不写日志 |
@@ -144,9 +144,29 @@ UPDATE goods SET stock = stock - 1 WHERE id = ? AND stock > 0
 | 系统概览 | 一次 `/admin/summary` 出业务计数 + 近 N 分钟速率 + 库存 + JVM；默认 5s 自动刷新（可关），离开该面板或标签页隐藏即停；阈值上色：堆 >70% 橙、>85% 红，支付率 <95% 橙，售罄商品 >0 橙 |
 | 数字参数校验 | `?page=abc`、`?size=1.5`、`?windowMinutes=abc` 返回 400 + `invalid parameter: <名>`，不再 500，也不透出 Java 异常原文 |
 | 压测数据准备 | 初始化内容只有**一份脚本** `src/main/resources/performance_testing.sql`（每张表先 `DROP` 再 `CREATE`，紧跟种子 `INSERT`）。`db.init-mode` 决定启动要不要跑它（默认 `always`；`if-absent` = 只在表没建齐时跑；`never` = 完全不动）。跑完一轮想清空，直接点概览页「系统重置」（要输入 RESET，执行会写 `DB_RESET` 审计）。**压测进行中不要点** |
-| 中文编码 | SQL 脚本固定按 UTF-8 读、JDBC 连接显式 `characterEncoding=UTF-8`。中文 Windows 默认字符集是 GBK，少了这两处，商品名会灌成「鑻规灉 iPhone 16 Pro Max」这类乱码；已经乱了的话执行一次系统重置即可恢复。注意转储脚本里的列字符集是 `utf8`(mb3)，商品名里有 emoji 会存不下 |
+| 中文编码 | SQL 脚本固定按 UTF-8 读、JDBC 连接显式 `characterEncoding=UTF-8`。中文 Windows 默认字符集是 GBK，少了这两处，商品名会灌成「鑻规灉 iPhone 16 Pro Max」这类乱码；已经乱了的话执行一次系统重置即可恢复。初始化脚本的列字符集已统一为 `utf8mb4`（旧版转储是 `utf8`/mb3，emoji 存不下） |
 | 下单 | 账号已被管理员删除时拒绝下单，避免产生无效 user_id 的订单 |
-| 存储引擎 | 当前库四张表是 `ENGINE = MyISAM`（服务端默认引擎不是 InnoDB）。**影响**：`buy()` 的 `@Transactional` 回滚不会生效——库存已扣、插订单失败时库存退不回来；防超卖仍然成立（扣库存是单语句条件 `UPDATE`，不依赖事务）。要真回滚就把表改成 InnoDB 后重建库 |
+| 存储引擎 | 初始化脚本已把四张表统一为 `ENGINE = InnoDB`。**为什么要管这个**：MyISAM 不支持事务，`buy()` 的 `@Transactional` 回滚不生效，会出现“库存扣了、订单没插进去”的缺口；防超卖两者都成立（扣库存是单语句条件 `UPDATE`）。老库若是 MyISAM，用下面一段 ALTER 迁移，或直接点「系统重置」重建 |
+
+
+### 老库迁移到 InnoDB / utf8mb4（不想重建数据时用）
+
+`db.init-mode=always`（默认）下次启动会自动用新脚本重建，**不需要**手工迁移。
+只有你把库留着、想原地改引擎时才跑这段：
+
+```sql
+ALTER TABLE `user`          ENGINE = InnoDB, CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE `goods`         ENGINE = InnoDB, CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE `orders`        ENGINE = InnoDB, CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE `operation_log` ENGINE = InnoDB, CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 商品名唯一索引（先确认没有重名，否则这条会失败）
+SELECT goods_name, COUNT(*) c FROM `goods` GROUP BY goods_name HAVING c > 1;
+ALTER TABLE `goods` ADD UNIQUE INDEX `goods_name` (`goods_name`);
+```
+
+> 顺序有讲究：`ALTER TABLE ... ENGINE` 是拷表重建，期间该表不可写；四张表加起来在压测后
+> 可能有几十万行订单，别在压测进行中做。
 
 ## 项目结构
 

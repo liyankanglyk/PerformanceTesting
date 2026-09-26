@@ -53,11 +53,11 @@ public class OrderServiceImpl extends ServiceImpl<OrdersMapper, Orders> implemen
      * 那个两步写法在并发下必然超卖。成功路径只有一次 selectById（取价格做成交快照），
      * 只有失败时才多查一次主键用于区分“商品不存在”和“库存不足”。
      *
-     * <p><b>关于 @Transactional</b>：当前库（见 performance_testing.sql 转储）四张表都是
-     * {@code ENGINE = MyISAM}，而 <b>MyISAM 不支持事务</b>，所以这里的回滚只对
-     * “同一个 MySQL 连接内的语句”成立，插订单失败时已扣的库存**不会**真的退回。
-     * 防超卖仍然成立（deductStock 是单语句原子操作，不依赖事务），但库存一致性会因此漏扣。
-     * 想拿到真回滚：把表改成 InnoDB（或把服务端 default_storage-engine 改成 InnoDB 后重建库）。
+     * <p><b>关于 @Transactional</b>：初始化脚本已把四张表从 MyISAM 改成 <b>InnoDB</b>，
+     * 所以这里的回滚是真生效的：插订单失败时，已扣的库存会随事务退回去。
+     * 若某个库是旧脚本建的、表仍是 MyISAM，则回滚不生效（MyISAM 不支持事务），
+     * 会出现“库存少了、订单没有”的缺口，参见 README 的“存储引擎”一行与迁移 SQL。
+     * 防超卖两种引擎下都成立：deductStock 是单语句条件 UPDATE，不依赖事务。
      */
     @Override
     @Transactional
