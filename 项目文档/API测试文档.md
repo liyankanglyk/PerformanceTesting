@@ -1060,7 +1060,7 @@ POST /api/admin/db/reset?confirm=RESET&mode=full
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|:---:|------|
 | confirm | string | ✓ | **必须一字不差等于 `RESET`**（区分大小写），否则 400 且完全不碰数据库。防 JMeter 脚本、防误点 |
-| mode | string | ✗ | `full`（默认）执行 `schema.sql + data.sql`，表结构与索引一起重建；`data` 只 `TRUNCATE` 四张表再灌 `data.sql`，保留索引，更快 |
+| mode | string | ✗ | `full`（默认）执行 `performance_testing.sql`，表结构、索引与种子数据一起重建。**`data` 已失去独立含义**（结构与数据合并在同一份脚本里），传 `data` 会降级成 `full` 并回 `downgradedToFull=true`，保留取值只为兼容旧调用 |
 
 **成功响应（code=200）：**
 
@@ -1097,7 +1097,8 @@ POST /api/admin/db/reset?confirm=RESET&mode=full
 | 会不会踢掉登录态 | **不必然**：`TRUNCATE`/重建会让自增 id 从 1 重新开始，管理员通常还是 id=1，旧 Token 仍指向它。但数据已经换了一套，所以前端重置成功后会主动跳登录页 |
 | 压测进行中千万别调 | 会 `TRUNCATE` 正在写入的 `orders`，本轮数据当场作废；并发保护只防「两次重置交叉」，不防「重置撞上业务写入」 |
 | JMeter | 该接口不要放进线程组（`confirm=RESET` 是给人的，不是给脚本的）。若一定要重置后再压测，放在 setUp Thread Group 里单次调用 |
-| 中文乱码 | 脚本固定按 **UTF-8** 读取（`DatabaseInitService.SCRIPT_ENCODING`）。历史上没指定编码时，中文 Windows（GBK 平台默认字符集）会把 `data.sql` 的 UTF-8 字节按 GBK 解码，商品名变成「鑻规灉 iPhone 16 Pro Max」。若你已有这样一个库，执行一次系统重置即可恢复 |
+| 中文乱码 | 脚本固定按 **UTF-8** 读取（`DatabaseInitService.SCRIPT_ENCODING`）。历史上没指定编码时，中文 Windows（GBK 平台默认字符集）会把脚本里的 UTF-8 字节按 GBK 解码，商品名变成「鑻规灉 iPhone 16 Pro Max」。若你已有这样一个库，执行一次系统重置即可恢复 |
+| 存储引擎 | 现有库四张表是 `ENGINE = MyISAM`（服务端默认引擎不是 InnoDB），字符集是 `utf8`(mb3) 而非 `utf8mb4`。**影响**：`POST /api/order/buy` 上的 `@Transactional` 回滚不会真正生效（库存已扣、插订单失败时不会退回）；防超卖仍然成立，因为扣库存是单语句条件 `UPDATE`。想要真回滚需把表改成 InnoDB |
 
 **curl 示例：**
 ```bash

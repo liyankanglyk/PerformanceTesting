@@ -32,11 +32,27 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 系统监控与运维接口，和 AdminController 共用 {@code /api/admin} 前缀，
+ * 因此同样要管理员 Token；按前缀去 AdminController 找这些接口是找不到的。
+ *
+ * <p>分两类：
+ * <ul>
+ *   <li>只读观测：{@code /status}、{@code /summary}、{@code /logs}、{@code /log-actions}，
+ *       给概览页轮询用（默认 5 秒一次）。</li>
+ *   <li>破坏性运维：{@code /db/state}、{@code /db/reset}，重置会清库并重灌种子数据。</li>
+ * </ul>
+ *
+ * <p>压测时**不要把这些接口放进高并发线程组**：{@code /summary} 一次要跑计数 + 速率 +
+ * 库存 + JVM 十几条查询，几十并发就能把连接池占满，测出来的业务 RT 全是假的。
+ * 要看实时指标，单开一个 1 线程 / 5 秒的定时器足够。
+ */
 @Tag(name = "System", description = "系统接口 — 运行状态监控与操作日志（需管理员 Token）")
 @RestController
 @RequestMapping("/api/admin")
 public class SystemController {
 
+    /** “最近 N 条日志”的条数上限，夹住 ?limit=999999 这类请求，不让它拉全表 */
     private static final int MAX_LOG_LIMIT = 1000;
 
     /** orders.status：0 未支付 / 1 已支付（与 OrderController.pay 的写入口径一致） */
@@ -45,12 +61,18 @@ public class SystemController {
     /** 速率统计窗口上限（分钟）：防止 ?windowMinutes=999999 把概览变成全表扫 */
     private static final int MAX_WINDOW_MINUTES = 60;
 
+    /** 日志翻页与操作类型枚举 */
     private final OperationLogService logService;
+    /** 概览页的业务计数之一（用户数） */
     private final UserService userService;
+    /** 概览页的业务计数与售罄统计 */
     private final GoodsService goodsService;
+    /** 概览页的订单计数与近 N 分钟速率 */
     private final OrderService orderService;
+    /** 库初始化状态与「系统重置」的执行者 */
     private final DatabaseInitService dbInitService;
 
+    /** 构造注入观测与运维数据的来源：日志、用户、商品、订单服务与库初始化服务。 */
     public SystemController(OperationLogService logService, UserService userService,
                             GoodsService goodsService, OrderService orderService,
                             DatabaseInitService dbInitService) {
@@ -61,6 +83,7 @@ public class SystemController {
         this.dbInitService = dbInitService;
     }
 
+    /** JVM 内存、GC、线程与启动信息。字段只增不改，新增指标往这里加而不是新开接口。 */
     @Operation(
         summary = "系统运行状态",
         description = "获取服务器实时运行状态，包括：运行时间、CPU核心数、堆内存使用/上限、非堆内存使用、线程数（当前/峰值）、JVM内存等。"
@@ -71,6 +94,7 @@ public class SystemController {
         return Result.ok(jvmInfo());
     }
 
+    /** 概览页唯一的聚合接口：业务计数 + 速率 + 库存 + JVM 一次返回，替代前端打四个分页接口取 total。 */
     @Operation(
         summary = "系统概览汇总",
         description = """
@@ -160,7 +184,7 @@ public class SystemController {
         info.put("totalMemory", runtime.totalMemory());
         info.put("freeMemory", runtime.freeMemory());
         info.put("maxMemory", runtime.maxMemory());
-        // 本轮新增，旧字段全部保留（不影响已有 JMeter 断言路径）
+        // 字段只增不改：已有 JMeter 断言按旧字段路径取值，改名或删字段会让断言静默全红
         info.put("heapPct", heapMax > 0 ? BigDecimal.valueOf(heapUsed)
                 .divide(BigDecimal.valueOf(heapMax), 4, RoundingMode.HALF_UP) : null);
         info.put("gcCount", gcCount);
@@ -169,6 +193,7 @@ public class SystemController {
         return info;
     }
 
+    /** 服务端分页 + 关键词/操作类型筛选，倒序按 create_time 再以 id 兜底。 */
     @Operation(
         summary = "操作日志列表",
         description = """
@@ -190,6 +215,7 @@ public class SystemController {
         return Result.ok(PageResult.of(logService.pageQuery(page, size, keyword, action)));
     }
 
+    /** 日志里真实出现过的枚举并上已知枚举，给筛选下拉框打底，避免新增动作时前端硬编码漏项。 */
     @Operation(
         summary = "操作日志操作类型列表",
         description = "返回当前日志中出现过的操作类型，供管理端筛选下拉框使用。"
@@ -201,6 +227,7 @@ public class SystemController {
 
     // ==================== 数据准备（压测间隆重灌） ====================
 
+    /** 只读，不含连接口令。库连不上时降级返回而不是 500 —— 表没建好正是它最该被调用的时候。 */
     @Operation(
         summary = "数据库初始化状态",
         description = """
@@ -216,13 +243,15 @@ public class SystemController {
         return Result.ok(s);
     }
 
+    /** 破坏性接口：清库重建，必须带 confirm=RESET；并发第二个请求会拿到 busy。审计在重建之后写，否则这条记录会被自己清掉。 */
     @Operation(
         summary = "重新灌入测试数据（危险）",
         description = """
             压测跑完一轮后手动把数据恢复到初始状态，不用重启服务。
 
-            - `mode=full`（默认）：执行 schema.sql + data.sql，**表结构与索引一起重建**，适合改过 DDL
-            - `mode=data`：只 TRUNCATE 四张表再灌 data.sql，**保留表结构与索引**，更快
+            - `mode=full`（默认）：执行初始化脚本 performance_testing.sql，每张表先 DROP 再建并灌种子数据
+            - `mode=data`：**已无“只清数据”这种能力**（结构与数据在同一份脚本里），会降级成 full，
+              响应里回 `downgradedToFull=true`；保留这个取值只是为了不打破已有调用
             - 必须带 `confirm=RESET`，否则 400（防 JMeter 脚本误调）
             - 服务器配置 `db.reset.enabled=false` 时返回 403
             - 已有重置在跑时返回 409
@@ -266,6 +295,7 @@ public class SystemController {
         return Result.ok("数据库已重置，请重新登录", r);
     }
 
+    /** 四条 count(*)。只给概览页用，别放进高并发线程组（见类注释）。 */
     private Map<String, Object> currentCounts() {
         Map<String, Object> counts = new LinkedHashMap<>();
         counts.put("users", userService.count());
@@ -275,6 +305,7 @@ public class SystemController {
         return counts;
     }
 
+    /** 当前管理员 ID，取自 JwtInterceptor 写入的 request 属性；写审计日志时作为操作人 */
     private Long adminId(HttpServletRequest request) {
         Object userId = request.getAttribute("userId");
         return userId instanceof Long ? (Long) userId : null;

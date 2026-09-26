@@ -27,18 +27,28 @@ class DatabaseInitServiceTest {
     }
 
     @Test
+    @DisplayName("初始化脚本必须存在于 classpath：改名或删掉会让启动直接失败")
+    void initScriptIsOnClasspath() {
+        // 把文件名写死在代码里，就必须有人证明这个资源真的打进了 classpath：
+        // 之前拆成 schema.sql + data.sql、后来合成单份转储，这类改名不会被编译发现。
+        var res = new org.springframework.core.io.ClassPathResource(DatabaseInitService.INIT_SCRIPT);
+        assertTrue(res.exists(), "找不到 classpath:" + DatabaseInitService.INIT_SCRIPT);
+    }
+
+    @Test
     @DisplayName("SQL 脚本按 UTF-8 读取：中文 Windows（GBK 平台默认）上不能把商品名灌成乱码")
     void scriptsAreReadAsUtf8() throws Exception {
         assertEquals("UTF-8", DatabaseInitService.SCRIPT_ENCODING);
         String data = java.nio.file.Files.readString(
-                java.nio.file.Path.of("src/main/resources/data.sql"), java.nio.charset.StandardCharsets.UTF_8);
+                java.nio.file.Path.of("src/main/resources/" + DatabaseInitService.INIT_SCRIPT),
+                java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(data.contains("苹果 iPhone 16 Pro Max"), "UTF-8 读取应得到正常中文");
         // 反证：同一份字节按 GBK 解码就会乱码——这正是线上「鑻规灉」的成因
         String gbk = new String(java.nio.file.Files.readAllBytes(
-                java.nio.file.Path.of("src/main/resources/data.sql")),
+                java.nio.file.Path.of("src/main/resources/" + DatabaseInitService.INIT_SCRIPT)),
                 java.nio.charset.Charset.forName("GBK"));
         org.junit.jupiter.api.Assertions.assertFalse(gbk.contains("苹果"),
-                "如果这条失败，说明 data.sql 已经不是 UTF-8 编码保存的");
+                "如果这条失败，说明初始化脚本已经不是 UTF-8 编码保存的");
         assertTrue(gbk.contains("鑻规灉") || !gbk.equals(data), "GBK 误读应产生不同结果，否则本用例无效");
     }
 

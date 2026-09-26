@@ -143,9 +143,10 @@ UPDATE goods SET stock = stock - 1 WHERE id = ? AND stock > 0
 | 角色/账号变更 | 管理接口每次回查数据库角色，被降级或删号的旧 Token 立即失效（403 / 401） |
 | 系统概览 | 一次 `/admin/summary` 出业务计数 + 近 N 分钟速率 + 库存 + JVM；默认 5s 自动刷新（可关），离开该面板或标签页隐藏即停；阈值上色：堆 >70% 橙、>85% 红，支付率 <95% 橙，售罄商品 >0 橙 |
 | 数字参数校验 | `?page=abc`、`?size=1.5`、`?windowMinutes=abc` 返回 400 + `invalid parameter: <名>`，不再 500，也不透出 Java 异常原文 |
-| 压测数据准备 | `db.init-mode` 决定启动要不要清库（默认 `always`＝历史行为；改 `if-absent` 就是「重启保留上一轮数据」）；跑完一轮想清空，直接点概览页「系统重置」（重建四张表 + 灌初始数据，要输入 RESET，执行会写 `DB_RESET` 审计）。**压测进行中不要点** |
-| 中文编码 | SQL 脚本固定按 UTF-8 读、JDBC 连接显式 `characterEncoding=UTF-8`。中文 Windows 默认字符集是 GBK，少了这两处，商品名会灌成「鑻规灉 iPhone 16 Pro Max」这类乱码；已经乱了的话执行一次系统重置即可恢复 |
+| 压测数据准备 | 初始化内容只有**一份脚本** `src/main/resources/performance_testing.sql`（每张表先 `DROP` 再 `CREATE`，紧跟种子 `INSERT`）。`db.init-mode` 决定启动要不要跑它（默认 `always`；`if-absent` = 只在表没建齐时跑；`never` = 完全不动）。跑完一轮想清空，直接点概览页「系统重置」（要输入 RESET，执行会写 `DB_RESET` 审计）。**压测进行中不要点** |
+| 中文编码 | SQL 脚本固定按 UTF-8 读、JDBC 连接显式 `characterEncoding=UTF-8`。中文 Windows 默认字符集是 GBK，少了这两处，商品名会灌成「鑻规灉 iPhone 16 Pro Max」这类乱码；已经乱了的话执行一次系统重置即可恢复。注意转储脚本里的列字符集是 `utf8`(mb3)，商品名里有 emoji 会存不下 |
 | 下单 | 账号已被管理员删除时拒绝下单，避免产生无效 user_id 的订单 |
+| 存储引擎 | 当前库四张表是 `ENGINE = MyISAM`（服务端默认引擎不是 InnoDB）。**影响**：`buy()` 的 `@Transactional` 回滚不会生效——库存已扣、插订单失败时库存退不回来；防超卖仍然成立（扣库存是单语句条件 `UPDATE`，不依赖事务）。要真回滚就把表改成 InnoDB 后重建库 |
 
 ## 项目结构
 
@@ -162,6 +163,6 @@ src/main/java/com/xiaohua/performancetesting/
 
 src/main/resources/
 ├── application.properties
-├── schema.sql + data.sql   # 按 db.init-mode 决定是否重建（always / if-absent / never），也可在概览页点「系统重置」手动重建
+├── performance_testing.sql # 唯一的初始化脚本（整库转储：DROP+CREATE+种子 INSERT），按 db.init-mode 决定是否执行，也可在概览页点「系统重置」手动重建
 └── static/                 # login / index / admin + css + js
 ```
