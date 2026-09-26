@@ -7,9 +7,11 @@ import java.security.NoSuchAlgorithmException;
 public class Md5Util {
 
     /**
-     * 使用 UTF-8 计算 MD5，必须与前端 js 的 utf8Encode + MD5 保持一致。
-     * 早期实现使用平台默认字符集（Windows 上为 GBK），
-     * 导致中文密码在服务端算出的摘要与客户端不一致，登录永远失败。
+     * 按 UTF-8 取字节计算 MD5，必须与前端 api.js 的 utf8Encode + md5 逐字节一致。
+     *
+     * <p>字符集不能省略：本项目跑 Java 17，中文 Windows 上平台默认字符集是 GBK，
+     * 少了这个参数，含中文的口令在服务端和浏览器会算出两个不同摘要，
+     * 表现为“密码明明对，却永远登录不上”。
      */
     public static String md5(String input) {
         try {

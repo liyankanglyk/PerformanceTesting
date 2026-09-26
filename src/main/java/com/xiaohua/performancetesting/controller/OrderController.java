@@ -19,21 +19,38 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 用户端订单接口：下单、支付、我的订单。
+ *
+ * <p>{@code POST /api/order/buy} 是 JMeter 主压测接口，写事务（扣库存 + 插订单）；
+ * 并发正确性由 GoodsMapper#deductStock 的条件 UPDATE 保证，这里不做“先查再扣”。
+ *
+ * <p>userId 只从 Token 取（request 属性），所以压测脚本必须先登录拿到对应账号的 Token；
+ * 想用同一个 Token 冒充别人下单是行不通的。
+ *
+ * <p>{@code PUT /api/order/pay/{orderNo}} 从管理端迁到这里：只允许本人支付（订单归属不符 403），
+ * 且是条件更新（status=0 才置 1），重复调用不会重复计入，也不会报错。
+ */
 @Tag(name = "Order", description = "订单接口 — 下单购买与订单查询")
 @RestController
 @RequestMapping("/api/order")
 public class OrderController {
 
+    /** 下单、支付、订单查询 */
     private final OrderService orderService;
+    /** 下单/支付前确认账号还在：Token 有效期内可能被管理员删号 */
     private final UserService userService;
+    /** 用户端审计入口（PLACE_ORDER、PAY_ORDER），受 operation-log.user-actions-enabled 开关控制 */
     private final OperationLogService logService;
 
+    /** 构造注入订单服务、用户服务（确认账号还在）与审计服务。 */
     public OrderController(OrderService orderService, UserService userService, OperationLogService logService) {
         this.orderService = orderService;
         this.userService = userService;
         this.logService = logService;
     }
 
+    /** JMeter 主压测接口。扣库存 + 插订单在同一事务里，库存判定交给数据库条件 UPDATE。 */
     @Operation(
         summary = "购买商品（下单）",
         description = """
@@ -93,11 +110,13 @@ public class OrderController {
                 + "（商品 #" + o.getGoodsId() + "，金额 " + (o.getPayPrice() == null ? "-" : o.getPayPrice().toPlainString()) + "）";
     }
 
+    /** 当前登录人名，审计日志用；取自 request 属性，不查库 */
     private String username(HttpServletRequest request) {
         Object name = request.getAttribute("username");
         return name == null ? null : String.valueOf(name);
     }
 
+    /** 只能支付自己的订单；条件更新保证重复调用只生效一次，返回码不区分“已支付”和“刚支付”。 */
     @Operation(
         summary = "确认支付订单（用户端）",
         description = """
@@ -158,6 +177,7 @@ public class OrderController {
         return Result.ok("paid", paid);
     }
 
+    /** 只返回当前 Token 用户的订单，按创建时间倒序；关键词匹配订单号。 */
     @Operation(
         summary = "查询我的订单",
         description = """

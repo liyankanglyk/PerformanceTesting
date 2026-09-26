@@ -105,8 +105,9 @@
 }
 
 /* ========== Status Cards ========== */
-/* 响应式：每格至少 132px，宽度够就自动多排几个；窄了就自己换行，不写死列数。
-   配合下面的小内边距 + 16px 字号，卡片整体比原来（minmax 220px / padding 24px / 24px 字号）紧凑得多。 */
+/* 概览卡片：auto-fill 响应式排布，每格最小 168px，宽度够就自动多排，窄了自己换行 —— 不写死列数。
+   这套尺寸（168 / gap 12 / padding 14 16 / 数值 19px）与下面的 .metric-* 完全对齐，
+   业务卡和 JVM 卡混在同一个面板里，尺寸不一致会显得很乱，改一处就要改两处。 */
 .status-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
@@ -248,9 +249,9 @@ a.danger-link {
     color: var(--danger);
 }
 
-/* 表格行内操作（事件委托，只传 data-id）。
-   上一版填了背景色 + min-width，在窄列里撑出单元格，看着像浮在表格外面；
-   现在透底 + 同色描边，尺寸贴着行高，两色仍有区分度，视觉上长在单格里。 */
+/* 表格行内操作按钮（事件委托，只传 data-id）。
+   刻意用透底 + 同色描边而不是实心填充：操作列宽度由 nowrap 的内容决定，
+   一旦给按钮加背景色或 min-width，视觉宽度就会顶破单元格边界，看起来像浮在表格外。 */
 tbody a[data-act] {
     display: inline-block;
     box-sizing: border-box;

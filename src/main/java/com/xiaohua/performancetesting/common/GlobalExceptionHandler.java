@@ -18,19 +18,23 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 /**
- * 统一异常出口。
+ * 统一异常出口：把未捕获异常转换成项目的 Result 结构，保证响应体里一定有 code/msg。
  *
- * 修复前：任何未捕获异常（空请求体、字段超长、唯一索引冲突、错误的 HTTP 方法等）
- * 都会返回 Spring 默认错误体（形如 {"timestamp":..,"status":500,"error":..,"path":..}），
- * 里面没有 code/msg 字段，管理端页面只能显示“操作失败”，管理员看不到真实原因。
+ * <p>状态码分两类处理，前端据此决定是弹窗提示还是跳登录页：
+ * <ul>
+ *   <li>框架级错误（空请求体 / 非法 JSON、缺请求头、405、406、415、参数类型不符）
+ *       —— HTTP 状态码保持原值，响应体换成 Result；</li>
+ *   <li>业务级错误（重名、字段值非法）—— 由 Controller 自己返回 “HTTP 200 + code”，
+ *       根本不进这里，所以这里不能把所有异常一律改写成 400。</li>
+ * </ul>
  *
- * 修复后：所有异常都转换成项目统一的 Result 结构；
- * 框架级错误（400/405/415/406 等）保持对应 HTTP 状态码，
- * 业务级错误（重名、字段值非法）沿用 Controller 自身的 “HTTP 200 + code” 风格。
+ * <p>响应体只放短语化的 msg（前端 api.js 的 MSG_ZH 表按它翻译中文），
+ * 异常原文、SQL、堆栈一律只进服务端日志，绝不出现在响应里。
  */
 @RestControllerAdvice(basePackages = "com.xiaohua.performancetesting.controller")
 public class GlobalExceptionHandler {
 
+    /** 异常原文只进这里（含参数值、SQL 约束名等），响应体里只放短语化的 msg */
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /** 请求体缺失 / 不是合法 JSON */
@@ -54,6 +58,13 @@ public class GlobalExceptionHandler {
             HttpMediaTypeNotSupportedException.class,
             HttpMediaTypeNotAcceptableException.class,
             MissingServletRequestParameterException.class})
+    /**
+     * 框架级错误统一处理：状态码从异常自带的 ErrorResponse 里读（405/415/406/缺参各不相同），
+     * 读不到才退回 500。
+     *
+     * <p>必须是这个形状而不是硬编码 400：JMeter 线程组里常有「非 2xx 即失败」的断言，
+     * 状态码错了会让整轮压测结果失真。
+     */
     public ResponseEntity<Result<Void>> handleErrorResponse(Exception e) {
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
         String detail = e.getMessage();
@@ -103,6 +114,7 @@ public class GlobalExceptionHandler {
                 .body(Result.fail(500, "internal server error: " + e.getClass().getSimpleName()));
     }
 
+    /** 400 响应体的统一构造点：HTTP 状态码与 body.code 必须同为 400。 */
     private static ResponseEntity<Result<Void>> badRequest(String msg) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.fail(400, msg));
     }

@@ -8,11 +8,13 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * OpenAPI 3 文档元信息（Swagger UI，由 springdoc-openapi 提供）。
- * 旧类名 Knife4jConfig：Knife4j 4.5.0 与 Spring Boot 3.4 不兼容，已换回官方 springdoc。
+ * <p>只用官方 springdoc-openapi：Knife4j 4.5.0 与 Spring Boot 3.4 不兼容（打开文档页会 500），
+ * 不要再引回来。
  */
 @Configuration
 public class OpenApiConfig {
 
+    /** 文档首页的标题/版本/联系人等元信息；接口清单由各 Controller 的 @Tag、@Operation 提供。 */
     @Bean
     public OpenAPI openAPI() {
         return new OpenAPI()

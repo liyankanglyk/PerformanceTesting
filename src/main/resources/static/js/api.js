@@ -1,35 +1,48 @@
+// ==================== 会话存储 ====================
+// Token 放 sessionStorage 而不是 localStorage：关掉标签页就没了。
+// 这台机器是压测机，同一个浏览器里可能来回切管理员/普通用户身份，
+// 用 sessionStorage 能保证每个标签页一套身份，不会互相串号。
+// 代价：新开标签页要重新登录，这是刻意的。
 const API_BASE = '/api';
 
+/** 当前标签页的 JWT；没有就是未登录 */
 function getToken() {
     return sessionStorage.getItem('token');
 }
 
+/** 登录名，仅用于界面显示与审计日志展示，鉴权不依赖它（服务端只认 Token） */
 function getUsername() {
     return sessionStorage.getItem('username');
 }
 
+/** 角色：0 普通用户 / 1 管理员。取自登录响应，只用来决定菜单显隐 */
 function getRole() {
     return parseInt(sessionStorage.getItem('role') || '0');
 }
 
+/** 前端判定是否为管理员。注意这只是界面层，真正的 403 由服务端 AdminInterceptor 决定 */
 function isAdmin() {
     return getRole() === 1;
 }
 
+/** 登录后一次性写入三项；role 为空按 0 处理，避免出现 'null' 字符串 */
 function saveSession(token, username, role) {
     sessionStorage.setItem('token', token);
     sessionStorage.setItem('username', username);
     sessionStorage.setItem('role', role != null ? role : 0);
 }
 
+/** 清空本标签页会话。服务端 Token 仍是有效的（无状态 JWT），所以“退出”不等于失效 */
 function clearSession() {
     sessionStorage.clear();
 }
 
+/** 只看有没有 Token，不校验有效性；过期要等接口回 401 才会被 apiFetch 统一处理 */
 function isLoggedIn() {
     return !!getToken();
 }
 
+/** 清会话并回登录页。接口返回 401 时也是走这里 */
 function redirectToLogin() {
     clearSession();
     window.location.href = '/login.html';
@@ -115,6 +128,7 @@ async function apiDelete(path) {
     });
 }
 
+/** 右上角轻提示。type: success / error / warning / info */
 function toast(msg, type) {
     type = type || 'success';
     var el = document.createElement('div');
@@ -205,7 +219,6 @@ function esc(s) {
     d.textContent = (s == null ? '' : String(s));
     return d.innerHTML;
 }
-/** 属性值里的 ID：只做数字校验，不靠转义 */
 /**
  * 属性值转义。esc() 只管文本节点（不转引号），拼进 data-* / title 必须用这个，
  * 否则值里有引号就能逃逸出属性。
@@ -216,18 +229,25 @@ function attr(v) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** 行内按钮的 data-id：只接受正整数，别的宁可返回 null 也不拼进 HTML（不靠转义兜底） */
 function attrId(v) {
     var n = Number(v);
     return (Number.isFinite(n) && n > 0) ? n : null;
 }
+/** 金额保留两位小数；后端给的是 BigDecimal 序列化出的数字，null/NaN 一律显示 '-' */
 function fmtAmount(v) {
     var n = Number(v);
     return (v == null || isNaN(n)) ? '-' : n.toFixed(2);
 }
+/** 带人民币符号的金额 */
 function fmtMoney(v) {
     var s = fmtAmount(v);
     return s === '-' ? s : '¥' + s;
 }
+/**
+ * 时间显示。兼容两种后端形态：毫秒时间戳（orders.createTs）和
+ * "2026-07-23T10:00:00" 字符串（LocalDateTime 序列化，截掉秒后面的部分）。
+ */
 function fmtTime(v) {
     if (v == null || v === '') return '-';
     if (typeof v === 'number') return new Date(v).toLocaleString('zh-CN');
@@ -236,8 +256,9 @@ function fmtTime(v) {
 }
 
 function md5(str) {
-    // Simple MD5 implementation for login password hashing
-    // Using a well-known pure JS MD5
+    // 纯 JS 实现的 MD5（公有领域参考实现，内部逐位运算函数不再逐个注释）。
+    // 口令要先 utf8Encode 再取摘要，才能与服务端 Md5Util（固定按 UTF-8 取字节）算出同一个值。
+    // 这一步不能省：中文口令在非 UTF-8 的运行时下两边摘要不同，表现为密码正确却登不进去。
     function rotateLeft(lValue, iShiftBits) {
         return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits));
     }
@@ -376,8 +397,9 @@ function utf8Encode(str) {
 }
 
 // ==================== 操作日志：动作与中文文案 ====================
-// 日志面板以前只展示 ADMIN_LOGIN / PLACE_ORDER 这类枚举名，管理员看不懂；
-// 统一在这里维护映射，admin.html 与接口文档共用同一份口径。
+// 操作类型英文枚举 -> 中文。后端只存枚举名（便于接口与日志检索），界面一律展示中文，
+// 原始枚举放在单元格的 title 里，对照接口文档时能看到。
+// 这里必须是唯一的口径来源：新增 action 时同步补接口文档，漏了会让日志出现裸枚举名。
 var ACTION_ZH = {
     ADMIN_LOGIN: '管理员登录',
     ADMIN_LOGOUT: '管理员退出',
@@ -399,6 +421,7 @@ var ACTION_ZH = {
 var ACTION_ORDER = ['ADMIN_LOGIN', 'ADMIN_LOGOUT', 'USER_LOGIN', 'USER_LOGOUT', 'PLACE_ORDER', 'PAY_ORDER',
     'CREATE_USER', 'UPDATE_USER', 'DELETE_USER', 'CREATE_GOODS', 'UPDATE_GOODS', 'DELETE_GOODS', 'DELETE_ORDER', 'DB_RESET'];
 
+/** 操作类型英文枚举 -> 中文；未识别的归到“其他”，绝不把裸枚举丢给用户看 */
 function actionLabel(action) {
     return ACTION_ZH[action] || '其他操作';
 }

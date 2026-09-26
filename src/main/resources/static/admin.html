@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理后台 - 速购商城</title>
-    <link rel="stylesheet" href="/css/style.css?v=11">
-    <link rel="stylesheet" href="/css/admin.css?v=11">
+    <link rel="stylesheet" href="/css/style.css?v=12">
+    <link rel="stylesheet" href="/css/admin.css?v=12">
 </head>
 <body>
 <div class="admin-layout">
@@ -197,7 +197,7 @@
     </div>
 </div>
 
-<script src="/js/api.js?v=11"></script>
+<script src="/js/api.js?v=12"></script>
 <script>
 // 页面守卫：未登录去登录页；已登录但不是管理员回商城（而不是被踢回登录页）
 var adminReady = isLoggedIn() && isAdmin();
@@ -365,7 +365,7 @@ function fmtUp(ms) {
 
 // ==================== Hash Router ====================
 // 面板 + 筛选条件 + 页码全部写进 URL（#/users?keyword=..&page=2&size=20）
-// 浏览器刷新、收藏、前进/后退都能回到当前视图；旧行为是刷新后一定掉回“系统概览”。
+// 浏览器刷新、收藏、前进/后退都能回到当前视图；没有 hash 时落到 #/dashboard 作为默认面板。
 var ROUTES = ['dashboard', 'users', 'goods', 'orders', 'logs'];
 var currentPanel = 'dashboard';
 
@@ -479,9 +479,9 @@ function switchPanel(name) {
 HashRoute.watch(applyRoute);
 
 // ==================== Dashboard ====================
-// 系统概览：业务数据 + 速率 + 库存 + JVM + 最近操作。
-// 以前只有 6 张 JVM 静态卡片，压测时看不出吞吐/支付率/GMV，也看不到数字在动。
-// 数据一次拿齐（/admin/summary），避开打 4 个列表接口只为取 total。
+// 系统概览面板：业务计数 + 速率 + 库存 + JVM + 最近操作摘要。
+// 数据一次从 /admin/summary 拿齐，不打 4 个列表接口只为取 total（那样每 5 秒要发 4 次带排序的分页查询）。
+// 刻意不放成交金额：本面板只关心吞吐与失败率。
 
 var DASH_KEY = { auto: 'dash.autoSec', win: 'dash.windowMinutes' };
 var DASH_AUTO_ALLOWED = [0, 5, 10, 30];        // 0 = 关闭轮询

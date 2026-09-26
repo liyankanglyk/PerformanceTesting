@@ -28,6 +28,31 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 管理端 CRUD：用户、商品、订单、以及日志相关的查询入口。
+ *
+ * <p>鉴权是两层的（见 WebConfig）：JwtInterceptor 先验签失败 401，
+ * AdminInterceptor 再按 Token 里的 role 判定，非管理员 403。
+ * 当前登录人一律从 request 属性取（userId / username / role），不接受参数传 ID。
+ *
+ * <p>列表接口统一用 {@code page}/{@code size} 服务端分页，size 默认 10、
+ * 上限 {@link com.xiaohua.performancetesting.config.MyBatisPlusConfig#MAX_PAGE_SIZE}；
+ * 越界页码返回空列表但 total 正确，不回绕到第一页。
+ *
+ * <p>写操作只在成功后记审计日志（失败原因五花八门，记下来只会污染审计）。
+ *
+ * <p>删除与降权有保护规则，命中时返回 500 带英文原因，由前端翻译成中文提示：
+ * <ul>
+ *   <li>不能删除当前登录账号自己（cannot delete your own account）</li>
+ *   <li>不能把自己的管理员角色去掉（cannot remove admin role from your own account）</li>
+ *   <li>用户名下还有订单时不能删用户，商品还有订单时不能删商品，要先删订单</li>
+ * </ul>
+ * 注意没有“必须留一个管理员”这种规则：库里可以只剩你自己，删自己是唯一会被挡住的情况。
+ *
+ * <p>口令按项目最初的实现原样入库（明文，见 User#password），这里不做任何摘要转换。
+ * 也就是说创建/改密码接口要传口令原文，别把登录用的 MD5(口令 + ts) 摘要存进去，
+ * 那样用户下次登录就永远算不出同样的摘要了。演示用途，不要照搬到生产。
+ */
 @Tag(name = "Admin", description = "管理端接口 — 用户/商品/订单管理（需管理员 Token）")
 @RestController
 @RequestMapping("/api/admin")
@@ -35,17 +60,23 @@ public class AdminController {
 
     /** user.username -> VARCHAR(50)，user.password -> VARCHAR(100) */
     private static final int MAX_USERNAME_LEN = 50;
+    /** user.password 列宽 100，先按它校验，别让数据库抛 1406 给前端 */
     private static final int MAX_PASSWORD_LEN = 100;
     /** goods.goods_name -> VARCHAR(200) */
     private static final int MAX_GOODS_NAME_LEN = 200;
     /** goods.price -> DECIMAL(10,2) */
     private static final BigDecimal MAX_PRICE = new BigDecimal("99999999.99");
 
+    /** 用户的增删改查与角色校验 */
     private final UserService userService;
+    /** 商品列表查询与增删改 */
     private final GoodsService goodsService;
+    /** 订单列表与按条件删除（要真实删除行数） */
     private final OrderService orderService;
+    /** 写操作成功后的审计入口 */
     private final OperationLogService logService;
 
+    /** 构造注入四个服务（用户、商品、订单、审计），全部 final，Spring 单构造器无需 @Autowired。 */
     public AdminController(UserService userService, GoodsService goodsService,
                            OrderService orderService, OperationLogService logService) {
         this.userService = userService;
@@ -56,6 +87,7 @@ public class AdminController {
 
     // ==================== User Management ====================
 
+    /** 关键词匹配登录名，按 id 升序分页；只查 role 之外的列没意义，密码字段照旧返回（演示项目存的就是明文）。 */
     @Operation(
         summary = "用户列表（分页）",
         description = """
@@ -82,6 +114,7 @@ public class AdminController {
         return Result.ok(PageResult.of(pg));
     }
 
+    /** 口令原文入库，不做摘要转换（见 User#password）。重名会被唯一索引拦下。 */
     @Operation(
         summary = "新增用户",
         description = """
@@ -132,6 +165,7 @@ public class AdminController {
         return Result.ok("created", user);
     }
 
+    /** 请求体里没填的字段不动；改密与改角色共用这一个入口，去掉自己管理员角色会被拒。 */
     @Operation(
         summary = "编辑用户",
         description = """
@@ -184,6 +218,7 @@ public class AdminController {
         return Result.ok("updated", null);
     }
 
+    /** 不能删当前登录账号；名下还有订单时要求先清订单。 */
     @Operation(
         summary = "删除用户",
         description = """
@@ -210,6 +245,7 @@ public class AdminController {
 
     // ==================== Goods Management ====================
 
+    /** 服务端分页，size 默认 10、上限 200；关键词匹配商品名。 */
     @Operation(
         summary = "商品列表（管理端）",
         description = "管理端商品面板专用，支持按商品名模糊搜索，固定按 id 升序。返回分页体 {records,total,page,size,pages}，每页默认 10 条。"
@@ -229,6 +265,7 @@ public class AdminController {
         return Result.ok(PageResult.of(pg));
     }
 
+    /** 商品名唯一，重复会返回失败；价格为 BigDecimal，别传字符串以外的格式。 */
     @Operation(
         summary = "新增商品",
         description = """
@@ -257,6 +294,7 @@ public class AdminController {
         return Result.ok("created", goods);
     }
 
+    /** 只更新传入的字段；库存直接覆盖，不做增量调整（要加减库存请传最终值）。 */
     @Operation(
         summary = "编辑商品",
         description = "更新商品信息（名称、价格、库存）。字段为空时不更新该字段。请求体示例：`{\"goodsName\":\"笔记本电脑\",\"price\":4999.00,\"stock\":30}`"
@@ -298,6 +336,7 @@ public class AdminController {
         return Result.ok("updated", null);
     }
 
+    /** 还有订单关联时不允许删除，避免订单里的 goodsId 变成无人能解释的悬空值。 */
     @Operation(
         summary = "删除商品",
         description = "根据商品 ID 删除商品。该商品已有订单时不允许删除（避免订单表出现无效 goods_id）。"
@@ -319,6 +358,7 @@ public class AdminController {
 
     // ==================== Order Management ====================
 
+    /** 全站订单，按 createTs 倒序；关键词匹配订单号，可选按用户/商品过滤。 */
     @Operation(
         summary = "全部订单列表（分页）",
         description = """
@@ -349,6 +389,7 @@ public class AdminController {
         return Result.ok(PageResult.of(pg));
     }
 
+    /** 物理删除，没有“已取消”状态可退回，所以删完就没了；审计里会留下订单快照。 */
     @Operation(
         summary = "删除订单",
         description = """
@@ -432,6 +473,7 @@ public class AdminController {
         return Math.min(size, MyBatisPlusConfig.MAX_PAGE_SIZE);
     }
 
+    /** 角色的中文写法，只用于审计 detail 文案；null 按普通用户处理 */
     private String roleText(Integer role) {
         return Integer.valueOf(1).equals(role) ? "管理员" : "普通用户";
     }
@@ -450,28 +492,37 @@ public class AdminController {
                 + "，" + (Integer.valueOf(1).equals(o.getStatus()) ? "已支付" : "未支付") + "）";
     }
 
+    /** 只接受 0 和 1，其它值（包括 null）一律 400，不让脏角色进库 */
     private boolean isValidRole(Integer role) {
         return role != null && (role == 0 || role == 1);
     }
 
+    /** role 为 1 才算管理员；user 为 null 返回 false，不抛异常 */
     private boolean isAdmin(User user) {
         return user != null && Integer.valueOf(1).equals(user.getRole());
     }
 
+    /** 当前管理员数量。编辑/删除时用它可以避免把最后一个管理员降权或删掉后无人能进后台 —— 但注意现有实现只挡住了“删自己”，没有强制保留一个。 */
     private long countAdmins() {
         return userService.count(new LambdaQueryWrapper<User>().eq(User::getRole, 1));
     }
 
+    /** 按登录名精确查一个用户，没有则 null。getOne 传 false 表示多条也不抛异常。 */
     private User findByUsername(String username) {
         return userService.getOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username), false);
     }
 
+    /** 按指定列统计某账号/某商品名下的订单数，用于删除保护。列做成参数是为了用户和商品复用同一条 count。 */
     private long countOrders(com.baomidou.mybatisplus.core.toolkit.support.SFunction<Orders, ?> column, Long value) {
         return orderService.count(new LambdaQueryWrapper<Orders>().eq(column, value));
     }
 
     /**
-     * @param partial true 时允许字段为空（只校验传入的字段，MyBatis-Plus 会跳过 null 字段）
+     * 商品字段校验，返回第一条错误信息；全部合法返回 null。
+     *
+     * @param partial true 表示局部更新（编辑商品）：没传的字段跳过校验，MyBatis-Plus 也不会写这些列；
+     *                false 表示新增：名称、价格、库存都必须给
+     * @return 错误短语（前端 MSG_ZH 表按它翻译中文），合法时为 null
      */
     private String validateGoods(Goods goods, boolean partial) {
         String name = goods.getGoodsName();
@@ -489,7 +540,7 @@ public class AdminController {
         } else if (price.compareTo(MAX_PRICE) > 0) {
             return "price too large (max " + MAX_PRICE + ")";
         } else if (price.scale() > 2) {
-            // DECIMAL(10,2) 会静四舍五入，管理员以为保存了 9.999 实际变成 10.00
+            // DECIMAL(10,2) 会把多余位四舍五入掉：管理员填 9.999，库里就成了 10.00，价格对不上还查不出原因
             return "price supports at most 2 decimal places";
         }
 
@@ -503,11 +554,13 @@ public class AdminController {
         return null;
     }
 
+    /** 当前管理员 ID，由 JwtInterceptor 从 Token 解出后放进 request 属性；写审计日志时作为操作人。 */
     private Long getAdminId(HttpServletRequest request) {
         Object userId = request.getAttribute("userId");
         return userId instanceof Long ? (Long) userId : null;
     }
 
+    /** 操作人登录名，由 JwtInterceptor 放进 request 属性；取不到就是 null，交给日志侧兜底成占位值 */
     private String getAdminName(HttpServletRequest request) {
         return (String) request.getAttribute("username");
     }

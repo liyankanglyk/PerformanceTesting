@@ -16,17 +16,30 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 用户端商品查询接口。
+ *
+ * <p>注意它**需要 Token**：WebConfig 只把 {@code /api/user/login} 和文档资源排除在
+ * JwtInterceptor 之外，{@code /api/goods/**} 不在白名单里。
+ * 写压测脚本时线程组里要先跑一次登录并把 Token 传给后续请求，否则会一片 401。
+ *
+ * <p>本接口返回全量列表（不分页），只用于用户端页面展示；
+ * 管理端分页列表走 {@code GET /api/admin/goods}，两者响应结构不同，不要混用。
+ */
 @Tag(name = "Goods", description = "商品接口 — 商品查询与搜索")
 @RestController
 @RequestMapping("/api/goods")
 public class GoodsController {
 
+    /** 商品列表查询（含关键词过滤） */
     private final GoodsService goodsService;
 
+    /** 构造注入商品查询服务。 */
     public GoodsController(GoodsService goodsService) {
         this.goodsService = goodsService;
     }
 
+    /** 用户端商品列表，返回全量不分页；需要 Token（不在 WebConfig 白名单里）。 */
     @Operation(
         summary = "商品列表查询",
         description = """

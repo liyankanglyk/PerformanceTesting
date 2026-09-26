@@ -110,8 +110,8 @@ body {
     color: #fff;
 }
 
-/* 需要整行宽按钮的地方各自声明；以前写成全局 .btn-primary{width:100%}，
-   弹窗里“取消 + 保存”会被挤到溢出、文字被遮 */
+/* 整行宽按钮必须在具体场景里各自声明。
+   不要图省事写成全局 .btn-primary{width:100%}：弹窗里“取消 + 保存”并排时会撑破容器、文字被裁掉。 */
 .login-card .btn-primary,
 .goods-card .btn-primary {
     width: 100%;
@@ -387,8 +387,8 @@ tr:last-child td {
     border-bottom: none;
 }
 
-/* 表格长内容：订单号 32 位、日志详情可能上百字，
-   以前既不折行也不省略，会把相邻列挤没、文字被遮挡 */
+/* 表格长内容：订单号 32 位、日志 detail 可能上百字。
+   长内容必须能折行或省略，否则会把相邻列挤没、文字溢出到别人格子里 */
 td {
     vertical-align: middle;
 }
@@ -427,10 +427,10 @@ td code {
 }
 
 /*
- * 重要：.row-actions 加在 <td> 上，绝对不能再给它设 display
- * （上一版写成 display:inline / display:flex 会让 <td> 不再是 table-cell，
- *   那一格会脱离表格网格、“浮”在行外面）。
- * 只给子元素设 inline-block，单元格保持默认的 table-cell。
+ * .row-actions 挂在 <td> 上：绝对不要再给 .row-actions 本身设 display。
+ * 任何 display（inline / flex / inline-flex 都算）都会让该元素不再是 table-cell，
+ * 那一格随之脱离表格网格、“浮”到行外面。
+ * 需要控制排版时只作用于子元素（下面的 inline-block），单元格保持默认 display。
  */
 .row-actions > * {
     display: inline-block;
@@ -438,7 +438,7 @@ td code {
 }
 
 .row-actions > * + * {
-    margin-left: 10px;          /* 固定间距，不再只靠一个空格 */
+    margin-left: 10px;          /* 按钮间距用 margin 明确给出，不靠 HTML 里的空白字符 */
 }
 .muted {
     color: var(--text-secondary);

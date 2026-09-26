@@ -23,6 +23,7 @@ public class PageResult<T> {
     /** 总页数 */
     private long pages;
 
+    /** 从 MyBatis-Plus 的分页结果转换。只取五个字段，不把 IPage 的内部结构（orders、optimizeCountSql 等）暴露成 API 契约。 */
     public static <T> PageResult<T> of(IPage<T> p) {
         PageResult<T> r = new PageResult<>();
         r.records = p.getRecords();
@@ -33,6 +34,11 @@ public class PageResult<T> {
         return r;
     }
 
+    /**
+     * 手工分页（先查全量、内存里切）时用的重载。
+     *
+     * <p>pages 在这里现算而不是从查询结果取；size 传 0 会得到 pages=0，不会抛除零。
+     */
     public static <T> PageResult<T> of(List<T> records, long total, long page, long size) {
         PageResult<T> r = new PageResult<>();
         r.records = records;

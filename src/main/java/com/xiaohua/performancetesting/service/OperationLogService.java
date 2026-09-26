@@ -13,13 +13,26 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 操作日志写入与查询。
+ *
+ * <p>只在写操作**成功之后**记日志（失败的原因五花八门，记下来只会污染审计），
+ * 所以控制器里都是“先干活、后 log”。日志写失败只打 WARN，绝不影响主业务：
+ * 审计是旁路，不能把下单带崩。
+ *
+ * <p>用户端动作（下单、支付、退出）默认也记，开关是
+ * {@code operation-log.user-actions-enabled}；压测跑用户端线程组前建议关掉，
+ * 否则 300 并发会把 operation_log 灌成最大表，翻页与统计一起变慢。
+ */
 @Service
 public class OperationLogService extends ServiceImpl<OperationLogMapper, OperationLog> {
 
+    /** 写日志失败的告警出口：只打 WARN，绝不把异常抛回业务线程 */
     private static final Logger LOGGER = LoggerFactory.getLogger(OperationLogService.class);
 
     /** operation_log.detail -> VARCHAR(500)，operation_log.username -> VARCHAR(50) */
     private static final int MAX_DETAIL_LEN = 500;
+    /** username 列宽 50，写入前按字符数截断，避免审计本身触发数据库错误 */
     private static final int MAX_USERNAME_LEN = 50;
 
     /** 全部操作类型（管理端 + 用户端），前端筛选下拉框的打底枚举 */
@@ -38,10 +51,11 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
     private boolean userActionsEnabled;
 
     /**
-     * 记录一条操作日志。写入失败不能影响主业务
-     * （以前 detail 超长会抛异常，导致“新增商品”实际已成功却返回操作失败）。
+     * 记录一条操作日志。审计是旁路：写失败只打 WARN，绝不影响主业务。
+     * 超长字段在这里截断（见 MAX_DETAIL_LEN），否则一条日志就能让
+     * “新增商品”这种已经成功的写操作反过来返回失败。
      *
-     * @param operatorId 操作人 ID（管理员或普通用户的 user.id；列原名 admin_id，已改 operator_id）
+     * @param operatorId 操作人 ID，管理员或普通用户的 user.id
      */
     public void log(Long operatorId, String username, String action, String detail) {
         try {
@@ -71,6 +85,7 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
         log(operatorId, username, action, detail);
     }
 
+    /** 用户端动作是否入库（operation-log.user-actions-enabled）。前端据此提示压测前要不要关。 */
     public boolean isUserActionsEnabled() {
         return userActionsEnabled;
     }
@@ -96,6 +111,7 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
         return list(w);
     }
 
+    /** 取最近 limit 条（不分页）。keyword 匹配范围见三参重载。 */
     public List<OperationLog> recent(int limit, String keyword) {
         return recent(limit, keyword, null);
     }
@@ -145,6 +161,7 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
         return null;
     }
 
+    /** 从 RequestContextHolder 取当前请求；不在请求线程时返回 null，调用方都要能处理这个 null。 */
     private jakarta.servlet.http.HttpServletRequest currentRequest() {
         Object attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
         if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes servlet) {
@@ -153,12 +170,20 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
         return null;
     }
 
+    /** 读当前请求的某个属性（userId / username / role），取不到返回 null，不抛异常。 */
     private Object currentRequestAttribute(String name) {
         jakarta.servlet.http.HttpServletRequest request = currentRequest();
         return request == null ? null : request.getAttribute(name);
     }
 
-    /** 分页查询：管理端日志面板用（以前一次性返回 limit 条，没法翻页） */
+    /**
+     * 管理端日志面板的翻页查询。
+     *
+     * @param page    页码，从 1 开始（小于 1 按 1 处理）
+     * @param size    每页条数，默认 10，上限 200，防止 size=999999 拉全表
+     * @param keyword 模糊匹配 操作人 / 操作类型 / 详情 / IP 四列，任意一列命中即可
+     * @param action  操作类型精确筛选，空则不限
+     */
     public com.baomidou.mybatisplus.core.metadata.IPage<OperationLog> pageQuery(long page, long size,
                                                                                 String keyword, String action) {
         LambdaQueryWrapper<OperationLog> w = new LambdaQueryWrapper<>();
@@ -183,6 +208,7 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
         return page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(p, sz), w);
     }
 
+    /** 按字符数截断到 max；null 原样返回。用字符数而不是字节数，中文才不会截出半个字。 */
     private static String truncate(String value, int max) {
         if (value == null) return null;
         return value.length() <= max ? value : value.substring(0, max);

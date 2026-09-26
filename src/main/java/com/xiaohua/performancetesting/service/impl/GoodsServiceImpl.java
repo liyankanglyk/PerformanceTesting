@@ -10,9 +10,14 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 
+/**
+ * 商品查询实现。只有一条列表查询，分页留给控制器用 MyBatis-Plus Page 做，
+ * 避免“先 list 全表再内存截断”这种在压测后必炸的写法。
+ */
 @Service
 public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements GoodsService {
 
+    /** 关键词为空返回全部。两个分支都按 id 升序，语义见接口注释。 */
     @Override
     public List<Goods> listAll(String keyword) {
         // 固定按 id 升序，否则删除/新增商品后管理端列表顺序会跳动

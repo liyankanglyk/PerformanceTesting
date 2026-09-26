@@ -19,13 +19,17 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 public final class IpUtil {
 
+    /** 取不到来源时的占位值。宁可写 unknown 也不写空串：日志表格与筛选都按非空处理。 */
     public static final String UNKNOWN = "unknown";
 
+    /** 代理链可能写过的头，按顺序试；仅当 ip.trust-forwarded-headers=true 时才读 */
     private static final String[] HEADERS = {"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP", "WL-Proxy-Client-IP"};
 
+    /** 私有构造：纯静态工具类，不允许实例化。 */
     private IpUtil() {
     }
 
+    /** 直连部署用的默认口径：完全不看代理头，只取 remoteAddr（配置默认就是这个）。 */
     public static String clientIp(HttpServletRequest request) {
         return clientIp(request, false);
     }
@@ -100,10 +104,12 @@ public final class IpUtil {
         return null;
     }
 
+    /** 本机回环的两种 IPv6 写法（::1 与全展开形式），归一成 127.0.0.1 才能和 IPv4 记录统一筛选。 */
     private static boolean isIpv6Loopback(String v) {
         return v.equals("::1") || v.equals("0:0:0:0:0:0:0:1");
     }
 
+    /** 严格点分四段判断：每段 1-3 位数字且 0-255；不接受 1.2.3、1.2.3.4.5、前导空格这类写法。 */
     static boolean isIpv4(String v) {
         String[] parts = v.split("\\.", -1);
         if (parts.length != 4) {
@@ -154,6 +160,7 @@ public final class IpUtil {
         return true;
     }
 
+    /** IPv6 分段是否为 1-4 位十六进制（只认小写，调用前已 toLowerCase）。 */
     private static boolean isHexGroup(String part) {
         if (part.length() > 4) {
             return false;

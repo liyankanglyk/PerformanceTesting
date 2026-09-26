@@ -17,12 +17,24 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * 用户端接口：登录、退出、个人信息。
+ *
+ * <p>{@code POST /api/user/login} 是**全项目唯一的登录入口**，管理端页面也调它，
+ * 成功后按 role 决定跳 /admin.html 还是 /index.html。它在 WebConfig 里被排除在
+ * JwtInterceptor 之外，是 /api/** 中少数不需要 Token 的接口。
+ *
+ * <p>防重放校验（时间戳与服务器偏差 ≤ 5 分钟）放在这里而不是 Service 里，
+ * 因为 Service 只关心口令比对；改登录逻辑时别把这两层拆散。
+ */
 @Tag(name = "User", description = "用户接口 — 登录与个人信息")
 @RestController
 @RequestMapping("/api/user")
 public class UserController {
 
+    /** 登录校验与 Token 签发 */
     private final UserService userService;
+    /** 只记登录/退出成功的事件；管理员与普通用户用不同 action，便于日志筛选 */
     private final OperationLogService logService;
 
     /**
@@ -33,11 +45,13 @@ public class UserController {
     @org.springframework.beans.factory.annotation.Value("${ip.trust-forwarded-headers:false}")
     private boolean trustForwardedHeaders;
 
+    /** 构造注入登录服务与审计服务；代理头开关 trustForwardedHeaders 走字段 @Value，不在构造参数里。 */
     public UserController(UserService userService, OperationLogService logService) {
         this.userService = userService;
         this.logService = logService;
     }
 
+    /** 全项目唯一的登录入口，管理端页面也调它。口令传摘要不传明文，时间戳参与计算并有 ±5 分钟新鲜度校验。 */
     @Operation(
         summary = "用户登录",
         description = """
@@ -94,7 +108,7 @@ public class UserController {
         if (token == null) {
             return Result.fail(401, "invalid username or password");
         }
-        // 登录已经验证过密码，这里只再查一次用户拿到 id 与角色（旧实现查了两次：getRoleByUsername + getOne）
+        // 口令已在校验里过，这里取一次用户拿 id 与角色：登录成功日志要记操作人 ID，role 决定记 ADMIN_LOGIN 还是 USER_LOGIN
         User login = userService.getOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<User>()
                 .eq(User::getUsername, username), false);
         if (login == null) {
@@ -112,6 +126,7 @@ public class UserController {
         return Result.ok(Map.of("token", token, "role", role));
     }
 
+    /** 只补一条审计日志：JWT 无状态，服务端不会让 Token 失效，清 Token 是客户端的事。 */
     @Operation(
         summary = "退出登录",
         description = """
@@ -146,6 +161,7 @@ public class UserController {
         return Result.ok("已退出");
     }
 
+    /** 按 Token 里的 userId 查库；口令字段返回前置空。账号被删返回 404。 */
     @Operation(
         summary = "获取当前登录用户信息",
         description = "根据请求头中的 Token 解析当前用户，返回用户基本信息（不含密码）。需要在请求头携带 `token`。"
