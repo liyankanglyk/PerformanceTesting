@@ -28,14 +28,24 @@ CREATE TABLE orders (
     create_ts BIGINT NOT NULL,
     status INT NOT NULL DEFAULT 0,
     INDEX idx_user_id (user_id),
-    INDEX idx_goods_id (goods_id)
+    INDEX idx_goods_id (goods_id),
+    INDEX idx_create_ts (create_ts),
+    INDEX idx_status_create_ts (status, create_ts)
 );
+
+-- idx_create_ts：系统概览“近 N 分钟下单速率”靠它做 range 扫描，否则每次刷新都全表扫；
+-- idx_status_create_ts：已支付速率与 GMV 都是 status + 时间两个谓词。
 
 CREATE TABLE operation_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    admin_id BIGINT NOT NULL,
+    operator_id BIGINT NOT NULL,
     username VARCHAR(50) NOT NULL,
+    role TINYINT DEFAULT NULL,
     action VARCHAR(50) NOT NULL,
     detail VARCHAR(500) DEFAULT '',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    ip VARCHAR(45) DEFAULT '',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_create_time (create_time)
 );
+
+-- 日志列表按 create_time desc + id desc 翻页，无索引时大表会 filesort。

@@ -6,8 +6,12 @@ import io.swagger.v3.oas.models.info.Info;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * OpenAPI 3 文档元信息（Swagger UI，由 springdoc-openapi 提供）。
+ * 旧类名 Knife4jConfig：Knife4j 4.5.0 与 Spring Boot 3.4 不兼容，已换回官方 springdoc。
+ */
 @Configuration
-public class Knife4jConfig {
+public class OpenApiConfig {
 
     @Bean
     public OpenAPI openAPI() {

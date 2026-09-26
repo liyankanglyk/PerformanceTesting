@@ -39,77 +39,200 @@ function redirectToIndex() {
     window.location.href = '/index.html';
 }
 
-async function apiGet(path) {
-    const res = await fetch(API_BASE + path, {
-        headers: { 'token': getToken() || '' }
-    });
-    const data = await res.json();
-    if (data.code === 401) {
+/**
+ * 统一请求出口：
+ * 1. 网络异常 / 非 JSON 响应（网关错误页、Spring 默认错误体）不再抛异常，而是归一化成 {code,msg,data}
+ * 2. code 缺失时用 HTTP 状态码补齐，前端能显示真实原因而不是“操作失败”
+ * 3. 401 自动跳登录（登录接口自身除外）
+ */
+async function apiRequest(path, options, skipAuthRedirect) {
+    var res, text, data;
+    try {
+        res = await fetch(API_BASE + path, options);
+        text = await res.text();
+    } catch (e) {
+        return { code: -1, msg: '无法连接服务器（' + (e && e.message ? e.message : 'network error') + '）', data: null };
+    }
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (e) {
+        data = {};
+    }
+    // 响应可能是字面量 null / 数组 / 字符串，归一化成对象后再读 code，避免 TypeError 抛给调用方
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) data = {};
+    if (typeof data.code !== 'number') {
+        var st = (typeof data.status === 'number' && data.status) ? data.status : res.status;
+        data.code = (st === 200) ? 500 : st;
+        data.msg = data.msg || data.error || (st === 403 ? '无管理员权限' : '请求失败 (HTTP ' + st + ')');
+    }
+    if (data.code === 401 && !skipAuthRedirect) {
         redirectToLogin();
     }
     return data;
 }
 
+async function apiGet(path) {
+    return apiRequest(path, {
+        headers: { 'token': getToken() || '' }
+    });
+}
+
 async function apiPost(path, body, extraHeaders, skipAuthRedirect) {
-    const headers = { 'Content-Type': 'application/json' };
+    var headers = { 'Content-Type': 'application/json' };
     if (extraHeaders) {
         Object.assign(headers, extraHeaders);
     }
     if (getToken()) {
         headers['token'] = getToken();
     }
-    const res = await fetch(API_BASE + path, {
+    return apiRequest(path, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify(body)
-    });
-    const data = await res.json();
-    if (!skipAuthRedirect && data.code === 401) {
-        redirectToLogin();
-    }
-    return data;
+        body: body == null ? '{}' : JSON.stringify(body)
+    }, skipAuthRedirect);
 }
 
 async function apiPut(path, body) {
-    const headers = { 'Content-Type': 'application/json' };
+    var headers = { 'Content-Type': 'application/json' };
     if (getToken()) {
         headers['token'] = getToken();
     }
-    const res = await fetch(API_BASE + path, {
+    return apiRequest(path, {
         method: 'PUT',
         headers: headers,
-        body: JSON.stringify(body)
+        body: body == null ? '{}' : JSON.stringify(body)
     });
-    const data = await res.json();
-    if (data.code === 401) {
-        redirectToLogin();
-    }
-    return data;
 }
 
 async function apiDelete(path) {
-    const headers = {};
+    var headers = {};
     if (getToken()) {
         headers['token'] = getToken();
     }
-    const res = await fetch(API_BASE + path, {
+    return apiRequest(path, {
         method: 'DELETE',
         headers: headers
     });
-    const data = await res.json();
-    if (data.code === 401) {
-        redirectToLogin();
-    }
-    return data;
 }
 
 function toast(msg, type) {
     type = type || 'success';
     var el = document.createElement('div');
     el.className = 'toast ' + type;
-    el.textContent = msg;
+    el.textContent = msg == null || msg === '' ? '操作失败' : String(msg);
     document.body.appendChild(el);
-    setTimeout(function() { el.remove(); }, 2000);
+    setTimeout(function() { el.remove(); }, 2500);
+}
+
+/**
+ * 后端错误文案是英文（便于接口测试），管理页面须展示中文。
+ * 未命中映射时原样透出 msg，不藏信息。
+ */
+var MSG_ZH = {
+    'token is missing': '未登录或登录状态已丢失，请重新登录',
+    'token has expired': '登录已过期，请重新登录',
+    'invalid token': '登录凭证无效，请重新登录',
+    'admin permission required': '无管理员权限',
+    'admin permission required, your role has been changed, please login again': '管理员角色已被修改，请重新登录',
+    'account has been deleted, please login again': '账号已被删除，请重新登录',
+    'invalid username or password': '用户名或密码错误',
+    'username, password and ts header are required': '用户名、密码和 ts 请求头不能为空',
+    'invalid timestamp format': '时间戳格式错误',
+    'timestamp expired, possible replay attack': '时间戳已过期（超过 5 分钟），请重试',
+    'username is required': '用户名不能为空',
+    'password is required': '密码不能为空',
+    'username too long (max 50)': '用户名长度不能超过 50',
+    'password too long (max 100)': '密码长度不能超过 100',
+    'role must be 0 or 1': '角色只能是 0（普通用户）或 1（管理员）',
+    'username already exists': '用户名已存在',
+    'invalid request body': '请求体不是合法 JSON',
+    'nothing to update: password or role is required': '请至少填写密码或角色',
+    'nothing to update: goodsName, price or stock is required': '请至少填写商品名称、单价或库存',
+    'cannot remove admin role from your own account': '不能取消当前登录账号的管理员角色',
+    'at least one admin account is required': '系统至少需要保留一个管理员账号',
+    'cannot delete your own account': '不能删除当前登录的账号',
+    'user not found': '用户不存在',
+    'user still has orders, delete orders first': '该用户还有订单，不能删除',
+    'goodsName is required': '商品名称不能为空',
+    'goodsName too long (max 200)': '商品名称长度不能超过 200',
+    'price is required': '请填写单价',
+    'stock is required': '请填写库存',
+    'price must be greater than or equal to 0': '单价不能为负数',
+    'price too large (max 99999999.99)': '单价超出上限 99999999.99',
+    'stock must be greater than or equal to 0': '库存不能为负数',
+    'goods not found': '商品不存在',
+    'goods still has orders, delete orders first': '该商品存在订单，不能删除',
+    'insufficient stock': '库存不足',
+    'order not found': '订单不存在',
+    'invalid orderNo': '订单号格式不正确',
+    'forbidden: not your order': '这不是你的订单，无法支付',
+    'order already paid': '该订单已是已支付状态',
+    'account not found, please login again': '账号不存在或已被删除，请重新登录',
+    'userId or goodsId is required': '请指定要清理订单的用户 ID 或商品 ID',
+    'record already exists': '记录已存在（唯一约束冲突）',
+    'invalid field value for this operation': '字段值不符合约束',
+    'user not found or deleted': '账号不存在或已被删除'
+};
+
+/** 把后端返回体翻译成可读提示 */
+function sleep(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+}
+
+function errMsg(data, fallback) {
+    if (!data) return fallback || '操作失败';
+    var msg = data.msg;
+    if (!msg) return (data.code === 403) ? '没有权限执行该操作' : (fallback || '操作失败');
+    // 先查具体文案映射，再用“权限”兼底：否则越权支付（403 not your order）会被误报成“无管理员权限”
+    if (MSG_ZH[msg]) return MSG_ZH[msg];
+    if (data.code === 403) return '没有权限执行该操作：' + msg;
+    var IP = 'invalid parameter:';
+    if (msg.indexOf(IP) === 0) return '参数格式不正确：' + msg.slice(IP.length).trim();
+    var H = 'missing required header:';
+    var P = 'missing required parameter:';
+    var I = 'internal server error:';
+    if (msg.indexOf(H) === 0) return '缺少请求头：' + msg.slice(H.length).trim();
+    if (msg.indexOf(P) === 0) return '缺少参数：' + msg.slice(P.length).trim();
+    if (msg.indexOf(I) === 0) return '服务器内部错误：' + msg.slice(I.length).trim();
+    if (msg.indexOf('Content-Type') === 0) return '请求的 Content-Type 必须是 application/json';
+    return msg;
+}
+
+// ==================== 通用展示/安全辅助（admin.html 与 index.html 共用）====================
+/** 只用于 HTML 元素内容；不转义引号，所以不要用来拼属性值 */
+function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = (s == null ? '' : String(s));
+    return d.innerHTML;
+}
+/** 属性值里的 ID：只做数字校验，不靠转义 */
+/**
+ * 属性值转义。esc() 只管文本节点（不转引号），拼进 data-* / title 必须用这个，
+ * 否则值里有引号就能逃逸出属性。
+ */
+function attr(v) {
+    return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function attrId(v) {
+    var n = Number(v);
+    return (Number.isFinite(n) && n > 0) ? n : null;
+}
+function fmtAmount(v) {
+    var n = Number(v);
+    return (v == null || isNaN(n)) ? '-' : n.toFixed(2);
+}
+function fmtMoney(v) {
+    var s = fmtAmount(v);
+    return s === '-' ? s : '¥' + s;
+}
+function fmtTime(v) {
+    if (v == null || v === '') return '-';
+    if (typeof v === 'number') return new Date(v).toLocaleString('zh-CN');
+    var s = String(v).replace('T', ' ');
+    return s.length > 19 ? s.substring(0, 19) : s;
 }
 
 function md5(str) {
@@ -251,3 +374,130 @@ function utf8Encode(str) {
     }
     return utftext;
 }
+
+// ==================== 操作日志：动作与中文文案 ====================
+// 日志面板以前只展示 ADMIN_LOGIN / PLACE_ORDER 这类枚举名，管理员看不懂；
+// 统一在这里维护映射，admin.html 与接口文档共用同一份口径。
+var ACTION_ZH = {
+    ADMIN_LOGIN: '管理员登录',
+    ADMIN_LOGOUT: '管理员退出',
+    USER_LOGIN: '用户登录',
+    USER_LOGOUT: '用户退出',
+    PLACE_ORDER: '用户下单',
+    DB_RESET: '重置测试数据',
+    PAY_ORDER: '用户支付',
+    CREATE_USER: '新增用户',
+    UPDATE_USER: '编辑用户',
+    DELETE_USER: '删除用户',
+    CREATE_GOODS: '新增商品',
+    UPDATE_GOODS: '编辑商品',
+    DELETE_GOODS: '删除商品',
+    DELETE_ORDER: '删除订单'
+};
+
+// 所有已知动作（下拉筛选的候选，顺序即展示顺序）
+var ACTION_ORDER = ['ADMIN_LOGIN', 'ADMIN_LOGOUT', 'USER_LOGIN', 'USER_LOGOUT', 'PLACE_ORDER', 'PAY_ORDER',
+    'CREATE_USER', 'UPDATE_USER', 'DELETE_USER', 'CREATE_GOODS', 'UPDATE_GOODS', 'DELETE_GOODS', 'DELETE_ORDER', 'DB_RESET'];
+
+function actionLabel(action) {
+    return ACTION_ZH[action] || '其他操作';
+}
+
+/** 日志表格里的“操作类型”单元格：主文案中文，原始枚举放 title，便于对照接口与排查 */
+/**
+ * 日志表“操作类型”单元格：只显示中文（业务同学看的），
+ * 原始枚举放 title，排查时鼠标悬停即可看到，不必再猜 PLACE_ORDER 是什么。
+ */
+function actionCell(action) {
+    var code = attr(action || '');
+    return '<span class="action-tag" title="' + code + '">' + esc(actionLabel(action)) + '</span>';
+}
+
+// ==================== 退出登录 ====================
+/**
+ * 先让服务端记一条退出日志，再清本地会话并跳转。
+ * 服务端用的是无状态 JWT，Token 本身在过期前仍可用；这里的“退出”= 写审计 + 客户端清 Token。
+ * 即使接口失败也必须退出，所以是 best-effort。
+ */
+var loggingOut = false;
+
+async function logoutCurrent(target, btn) {
+    if (loggingOut) return;                 // 连点两次会写出两条退出日志
+    loggingOut = true;
+    if (btn) btn.disabled = true;
+    try {
+        // 审计只是尽力而为，最多等 1.5s，不能让退出卡在请求上
+        await Promise.race([apiPost('/user/logout', undefined, undefined, true), sleep(1500)]);
+    } catch (e) {
+        // 网络异常不影响退出
+    }
+    clearSession();
+    window.location.href = target || '/login.html';
+}
+
+// ==================== Hash 路由（admin.html / index.html 共用）====================
+// 页面面板状态写进 URL：刷新、收藏、前进后退都能还原当前视图。
+var HashRoute = {
+    /** 解析 #/name?a=1&b=2；未知 name 回落 home */
+    parse: function (names, home) {
+        var h = String(window.location.hash || '').replace(/^#\/?/, '');
+        var i = h.indexOf('?');
+        var name = (i < 0 ? h : h.substring(0, i)) || home;
+        if (names.indexOf(name) < 0) name = home;
+        var query = {};
+        if (i >= 0) {
+            h.substring(i + 1).split('&').forEach(function (kv) {
+                if (!kv) return;
+                var t = kv.split('=');
+                try {
+                    query[decodeURIComponent(t[0])] = decodeURIComponent(t[1] || '');
+                } catch (e) {
+                    /* 半截百分号编码：忽略该参数，其余照常解析 */
+                }
+            });
+        }
+        return { name: name, query: query };
+    },
+
+    /** params -> query 串；值等于 defaults 或为空时省略，保持地址干净 */
+    build: function (name, params, defaults) {
+        var parts = [];
+        Object.keys(params).forEach(function (key) {
+            var value = params[key];
+            if (value === '' || value === null || value === undefined) return;
+            if (defaults && String(value) === String(defaults[key])) return;
+            parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+        });
+        return '#/' + name + (parts.length ? '?' + parts.join('&') : '');
+    },
+
+    /**
+     * 用 replaceState 写 hash：不新增历史记录，浏览器后退仍然回到“上一个面板”。
+     * 不支持 replaceState 的环境退化为直接改 hash。
+     */
+    write: function (name, params, defaults) {
+        var target = HashRoute.build(name, params, defaults);
+        if (window.location.hash === target) return false;
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search + target);
+        } else {
+            window.location.hash = target;
+        }
+        return true;
+    },
+
+    /** 首次进入没有 hash 时补默认路由（同样不产生历史记录） */
+    ensureHome: function (home) {
+        if (window.location.hash) return;
+        var target = '#/' + home;
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search + target);
+        } else {
+            window.location.hash = target;
+        }
+    },
+
+    watch: function (handler) {
+        window.addEventListener('hashchange', handler);
+    }
+};

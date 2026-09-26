@@ -85,34 +85,61 @@
     margin-bottom: 16px;
     display: flex;
     gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-select {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    background: #fff;
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    border-color: var(--primary);
 }
 
 /* ========== Status Cards ========== */
+/* 响应式：每格至少 132px，宽度够就自动多排几个；窄了就自己换行，不写死列数。
+   配合下面的小内边距 + 16px 字号，卡片整体比原来（minmax 220px / padding 24px / 24px 字号）紧凑得多。 */
 .status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 10px;
 }
 
+/* 运行时指标都是短数字，不需要 24px 内边距 + 24px 大字号：收紧到信息条尺寸 */
 .status-card {
     background: var(--card-bg);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 24px;
+    padding: 10px 12px;
     text-align: center;
+    min-width: 0;               /* 网格列里允许收缩，配合下面 ellipsis */
 }
 
 .status-value {
-    font-size: 24px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--primary);
-    margin-bottom: 8px;
-    word-break: break-all;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .status-label {
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.35;
     color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ========== Modal ========== */
@@ -175,9 +202,203 @@
     margin-top: 8px;
 }
 
+/* ========== Pagination ========== */
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.pager:empty {
+    display: none;
+}
+
+.page-btn {
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    border-color: var(--primary);
+}
+
+.page-btn.disabled {
+    color: #bbb;
+    cursor: not-allowed;
+    background: #fafafa;
+}
+
+.page-info {
+    margin: 0 4px;
+    white-space: nowrap;
+}
+
 /* ========== Links ========== */
 a.danger-link {
     color: var(--danger);
+}
+
+/* 表格行内操作（事件委托，只传 data-id）。
+   上一版填了背景色 + min-width，在窄列里撑出单元格，看着像浮在表格外面；
+   现在透底 + 同色描边，尺寸贴着行高，两色仍有区分度，视觉上长在单格里。 */
+tbody a[data-act] {
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 2px 10px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.5;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;        /* 按钮文案自身不折行 */
+    vertical-align: middle;
+    border: 1px solid rgba(22, 119, 255, 0.45);
+    border-radius: 4px;
+    color: var(--primary);
+    background: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+tbody a[data-act]:hover {
+    color: #fff;
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+tbody a[data-act].danger-link {
+    border-color: rgba(255, 77, 79, 0.45);
+    color: var(--danger);
+    background: transparent;
+}
+
+tbody a[data-act].danger-link:hover {
+    color: #fff;
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.empty.table-error {
+    color: var(--danger);
+}
+
+.tag-me {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: var(--primary);
+    background: var(--primary-light);
+    border-radius: 4px;
+}
+
+/* ========== Disabled / readonly state ========== */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.modal .form-group input[readonly] {
+    background: #f5f5f5;
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+.panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;            /* 窄屏换行，而不是把按钮挤出去 */
+}
+
+.panel-head .panel-title {
+    margin-bottom: 0;
+}
+
+/* 新增按钮放在标题行右侧：小尺寸、不被 flex 拉伸 */
+.panel-head .btn {
+    flex: none;
+    padding: 0 14px;
+    font-weight: 500;
+}
+
+/* 面板顶部说明（如“支付已移到用户端”） */
+.hint {
+    margin: -4px 0 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* ========== Toolbar / modal / pager 间距 ========== */
+/* 工具条里的搜索框：允许伸缩，但不小到看不清（flex 子项没 min-width:0 会撑破容器） */
+.toolbar .search-bar {
+    flex: 1 1 240px;
+    min-width: 200px;
+    max-width: 460px;
+    margin-bottom: 0;
+}
+
+.toolbar .search-bar input {
+    min-width: 0;
+}
+
+.toolbar > .btn {
+    flex: none;
+}
+
+/* 弹窗底部：取消 + 保存 各自留够宽度，不再被全局 width:100% 挤扁 */
+.modal-actions .btn {
+    width: auto;
+    min-width: 88px;
+    padding: 0 18px;
+}
+
+/* 分页条：文案 + 上一页/下一页 + 每页条数，窄屏换行而不重叠 */
+.pager {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+
+.pager .filter-select {
+    height: 30px;
+    min-width: 84px;
+}
+
+/* 日志表“操作类型”列：中文标签不折行 */
+.cell-action {
+    min-width: 96px;
+    white-space: nowrap;
+}
+
+/* 日志 IP 列：等宽、不换行，方便扫读 */
+.cell-ip {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* 侧栏里的退出按钮用浅色描边，避免与深色底撞色 */
+.sidebar .btn-ghost {
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    color: #fff;
+}
+
+.sidebar .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.28);
+    border-color: #fff;
+    color: #fff;
 }
 
 /* ========== Responsive ========== */
@@ -185,16 +406,257 @@ a.danger-link {
     .sidebar {
         width: 160px;
     }
+    .pager {
+        justify-content: flex-start;
+    }
     .sidebar-logo {
         font-size: 16px;
     }
     .main-content {
         padding: 12px;
     }
-    .status-grid {
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    }
     .modal {
         width: 90%;
     }
+}
+
+/* ==================== 系统概览（B 档） ==================== */
+
+.dash-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.dash-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.dash-tool select {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border, #d9d9d9);
+    border-radius: 5px;
+    background: #fff;
+    font-size: 13px;
+}
+
+.dash-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: -4px 0 14px;
+}
+
+.dash-meta .dash-dot {
+    color: var(--border, #d9d9d9);
+}
+
+.dash-meta .dash-fail {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.dash-group {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 22px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border, #f0f0f0);
+}
+
+.dash-more {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.dash-more:hover {
+    text-decoration: underline;
+}
+
+.dash-loading {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 16px 0;
+}
+
+.metric-grid {
+    display: grid;
+    /* 与 JVM 卡片同一套节奏：自动排布，不写死一行几个 */
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 10px;
+}
+
+/* 卡片既可能是 div 也可能是 a（可点跳转），两者外观必须一致 */
+.metric-card,
+a.metric-card {
+    display: block;
+    box-sizing: border-box;
+    min-width: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border, #f0f0f0);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 12px 14px;
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+    transition: box-shadow .15s, border-color .15s, transform .15s;
+}
+
+a.metric-card.is-link {
+    cursor: pointer;
+}
+
+a.metric-card.is-link:hover {
+    border-color: var(--primary);
+    box-shadow: 0 2px 10px rgba(22, 119, 255, .16);
+    transform: translateY(-1px);
+}
+
+.metric-value {
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--text-color, #1f2329);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;      /* 六个一排时宁可省略号，也不要把数字折成两行 */
+}
+
+.metric-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.metric-sub {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    word-break: break-all;
+}
+
+/* 阈值色：压测时吞吐掉下去要一眼看见，不靠人肉读数字 */
+.metric-card.is-warn .metric-value { color: var(--warning); }
+.metric-card.is-bad  .metric-value { color: var(--danger); }
+
+/* 堆内存进度条 */
+.heap-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border, #f0f0f0);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+
+.heap-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+}
+
+.heap-label {
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.heap-track {
+    position: relative;
+    flex: 1 1 auto;
+    height: 10px;
+    border-radius: 5px;
+    background: #f0f0f0;
+    overflow: hidden;
+    min-width: 80px;
+}
+
+.heap-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 5px;
+    transition: width .3s ease;
+}
+
+.heap-fill.is-ok   { background: var(--success); }
+.heap-fill.is-warn { background: var(--warning); }
+.heap-fill.is-bad  { background: var(--danger); }
+
+.heap-value {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.heap-value.is-ok   { color: var(--success); }
+.heap-value.is-warn { color: var(--warning); }
+.heap-value.is-bad  { color: var(--danger); }
+
+.heap-spark {
+    display: block;
+    width: 100%;
+    height: 44px;
+    margin-top: 10px;
+}
+
+.heap-spark.is-ok   { color: var(--success); }
+.heap-spark.is-warn { color: var(--warning); }
+.heap-spark.is-bad  { color: var(--danger); }
+
+.heap-spark-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* 最近操作：只读摘要，不搬分页条 */
+.recent-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border, #f0f0f0);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 4px 18px;
+    overflow: auto;
+}
+
+.recent-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.recent-table td {
+    padding: 9px 8px;
+    border-bottom: 1px solid var(--border, #f5f5f5);
+    vertical-align: middle;
+}
+
+.recent-table tr:last-child td {
+    border-bottom: none;
+}
+
+.recent-detail {
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
 }

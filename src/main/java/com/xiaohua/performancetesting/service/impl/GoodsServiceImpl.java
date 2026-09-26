@@ -15,10 +15,12 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
 
     @Override
     public List<Goods> listAll(String keyword) {
+        // 固定按 id 升序，否则删除/新增商品后管理端列表顺序会跳动
         if (!StringUtils.hasText(keyword)) {
-            return list();
+            return list(new LambdaQueryWrapper<Goods>().orderByAsc(Goods::getId));
         }
         return list(new LambdaQueryWrapper<Goods>()
-                .like(Goods::getGoodsName, keyword));
+                .like(Goods::getGoodsName, keyword.trim())
+                .orderByAsc(Goods::getId));
     }
 }

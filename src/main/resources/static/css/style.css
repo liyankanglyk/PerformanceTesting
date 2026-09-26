@@ -99,12 +99,51 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
+    white-space: nowrap;      /* 窄列里按钮文案不许换行被裁 */
+    flex: none;               /* flex 容器里不被压缩 */
+    box-sizing: border-box;
+    line-height: 1;
 }
 
 .btn-primary {
-    width: 100%;
     background: var(--primary);
     color: #fff;
+}
+
+/* 需要整行宽按钮的地方各自声明；以前写成全局 .btn-primary{width:100%}，
+   弹窗里“取消 + 保存”会被挤到溢出、文字被遮 */
+.login-card .btn-primary,
+.goods-card .btn-primary {
+    width: 100%;
+}
+
+/* 次要按钮（退出登录等） */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: rgba(22, 119, 255, 0.06);
+}
+
+/* 用户端“确认支付” */
+.btn-pay {
+    background: var(--primary);
+    color: #fff;
+    min-width: 132px;
+}
+
+.btn-pay:hover {
+    background: var(--primary-hover);
+}
+
+.btn-pay:disabled {
+    opacity: 0.65;
+    cursor: progress;
 }
 
 .btn-primary:hover {
@@ -184,6 +223,7 @@ body {
 
 .tab {
     flex: 1;
+    text-decoration: none;   /* 标签现在是 <a href="#/..."> 真实链接 */
     height: 40px;
     display: flex;
     align-items: center;
@@ -316,7 +356,7 @@ body {
     background: var(--card-bg);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    overflow: hidden;
+    overflow: auto;             /* 列太多时横向滚动，而不是挤压文字 */
 }
 
 table {
@@ -345,6 +385,80 @@ td {
 
 tr:last-child td {
     border-bottom: none;
+}
+
+/* 表格长内容：订单号 32 位、日志详情可能上百字，
+   以前既不折行也不省略，会把相邻列挤没、文字被遮挡 */
+td {
+    vertical-align: middle;
+}
+
+td.num,
+th.num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.cell-time {
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.cell-code,
+td code {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    word-break: break-all;      /* 关键：长订单号在窄列里换行而不是溢出 */
+}
+
+.cell-detail {
+    max-width: 460px;
+    word-break: break-word;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* 操作列：不强制 width:1%（那样 nowrap 的内容会画出单元格边界，看着像浮在表格外），
+   而是让表格按内容自然分配列宽，长内容由 .cell-detail / td code 的换行规则封顶 */
+.col-actions {
+    white-space: nowrap;        /* 保证编辑 / 删除 同行 */
+    text-align: left;
+}
+
+/*
+ * 重要：.row-actions 加在 <td> 上，绝对不能再给它设 display
+ * （上一版写成 display:inline / display:flex 会让 <td> 不再是 table-cell，
+ *   那一格会脱离表格网格、“浮”在行外面）。
+ * 只给子元素设 inline-block，单元格保持默认的 table-cell。
+ */
+.row-actions > * {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.row-actions > * + * {
+    margin-left: 10px;          /* 固定间距，不再只靠一个空格 */
+}
+.muted {
+    color: var(--text-secondary);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* 日志“操作类型”：中文为主，原始枚举用小字附注 */
+.action-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--primary-light, #e6f4ff);
+    color: var(--primary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.action-tag[title] {
+    cursor: help;               /* 悬停可看到原始枚举值 */
 }
 
 .status-badge {
@@ -427,4 +541,31 @@ tr:last-child td {
     .header .logo {
         font-size: 15px;
     }
+}
+
+/* 危险操作按钮：描边红，不抢主按钮的视觉权重（概览页“重新灌入测试数据”） */
+.btn-danger-ghost {
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    background: transparent;
+}
+
+.btn-danger-ghost:hover {
+    color: #fff;
+    background: var(--danger);
+}
+
+.btn-danger-ghost:disabled {
+    color: var(--text-secondary);
+    border-color: var(--border, #d9d9d9);
+    background: #f5f5f5;
+    cursor: not-allowed;
+}
+
+/* 概览工具条里的分组间隔：把“看数据”和“改数据”两组操作隔开 */
+.dash-sep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border, #e5e5e5);
+    margin: 0 2px;
 }

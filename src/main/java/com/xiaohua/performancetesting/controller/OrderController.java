@@ -1,8 +1,12 @@
 package com.xiaohua.performancetesting.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.xiaohua.performancetesting.common.Result;
 import com.xiaohua.performancetesting.entity.Orders;
+import com.xiaohua.performancetesting.service.OperationLogService;
 import com.xiaohua.performancetesting.service.OrderService;
+import com.xiaohua.performancetesting.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,9 +25,13 @@ import java.util.Map;
 public class OrderController {
 
     private final OrderService orderService;
+    private final UserService userService;
+    private final OperationLogService logService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, UserService userService, OperationLogService logService) {
         this.orderService = orderService;
+        this.userService = userService;
+        this.logService = logService;
     }
 
     @Operation(
@@ -64,12 +72,90 @@ public class OrderController {
         if (goodsId == null) {
             return Result.fail(400, "goodsId is required");
         }
+        // Token 有效期内账号可能已被管理员删除，不能再产生无效 user_id 的订单
+        if (userId == null || userService.getById(userId) == null) {
+            return Result.fail(401, "account not found, please login again");
+        }
         try {
             Orders order = orderService.buy(userId, goodsId);
+            // 用户端也要能追溯：谁在什么时候下了哪一单（只记成功，失败原因已返回给调用方）
+            logService.logUser(userId, username(request), "PLACE_ORDER", orderBrief(order));
             return Result.ok("order placed successfully", order);
         } catch (RuntimeException e) {
             return Result.fail(e.getMessage());
         }
+    }
+
+    /** 订单快照，与管理端日志格式保持一致：能回答“谁下的单、买了什么、多少钱” */
+    private String orderBrief(Orders o) {
+        if (o == null) return "订单不存在";
+        return "#" + o.getId() + " 订单号 " + o.getOrderNo()
+                + "（商品 #" + o.getGoodsId() + "，金额 " + (o.getPayPrice() == null ? "-" : o.getPayPrice().toPlainString()) + "）";
+    }
+
+    private String username(HttpServletRequest request) {
+        Object name = request.getAttribute("username");
+        return name == null ? null : String.valueOf(name);
+    }
+
+    @Operation(
+        summary = "确认支付订单（用户端）",
+        description = """
+            用户支付自己的订单，状态 0（未支付）→ 1（已支付）。
+
+            **只能付自己的单**：订单 `user_id` 与 Token 不一致返回 403；不存在返回 404。
+            **并发安全**：条件更新 `WHERE id = ? AND status = 0`，重复提交（双击/重试）只有一次能改成功，
+            第二次返回 500 `order already paid`，不会重复写日志。
+            管理端不再提供“标记已支付”（支付应由用户自己完成）。
+            """
+    )
+    @Parameter(name = "orderNo", description = "下单接口返回的订单号", required = true)
+    @ApiResponse(responseCode = "200", description = "支付成功")
+    @ApiResponse(responseCode = "400", description = "订单号格式非法")
+    @ApiResponse(responseCode = "403", description = "不是当前用户的订单")
+    @ApiResponse(responseCode = "404", description = "订单不存在")
+    @ApiResponse(responseCode = "500", description = "订单已支付")
+    @PutMapping("/pay/{orderNo}")
+    public Result<?> pay(@PathVariable String orderNo, HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return Result.fail(401, "token is missing");
+        }
+        String no = orderNo == null ? "" : orderNo.trim();
+        if (!no.matches("[0-9a-zA-Z\\-]{8,64}")) {
+            return Result.fail(400, "invalid orderNo");
+        }
+        Orders order = orderService.getOne(new LambdaQueryWrapper<Orders>()
+                .eq(Orders::getOrderNo, no), false);
+        if (order == null) {
+            return Result.fail(404, "order not found");
+        }
+        // 越权拦截：订单号是 32 位随机串，但不能指望“猜不到”当权限
+        if (!userId.equals(order.getUserId())) {
+            return Result.fail(403, "forbidden: not your order");
+        }
+        boolean changed = orderService.update(new LambdaUpdateWrapper<Orders>()
+                .eq(Orders::getId, order.getId())
+                .eq(Orders::getUserId, userId)          // 归属锁在 SQL 谓词里，不依赖上面那次读（避开 TOCTOU）
+                .eq(Orders::getStatus, 0)
+                .set(Orders::getStatus, 1));
+        if (!changed) {
+            Orders now = orderService.getById(order.getId());
+            if (now == null) {
+                // 读到行后又被管理员删掉，不能报成“已支付”
+                return Result.fail(404, "order not found");
+            }
+            return Result.fail(500, "order already paid");
+        }
+        Orders paid = orderService.getById(order.getId());
+        if (paid == null) {
+            // 支付已成吽，只是快照拿不到：回一个合并后的对象，不返回 code=200 + data=null
+            order.setStatus(1);
+            paid = order;
+        }
+        // 支付是资金状态变更，审计不受 operation-log.user-actions-enabled 开关影响（旧版管理端接口是必记的）
+        logService.log(userId, username(request), "PAY_ORDER", "确认支付：" + orderBrief(paid));
+        return Result.ok("paid", paid);
     }
 
     @Operation(

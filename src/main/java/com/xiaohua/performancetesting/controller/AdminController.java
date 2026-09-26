@@ -1,8 +1,10 @@
 package com.xiaohua.performancetesting.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xiaohua.performancetesting.common.PageResult;
 import com.xiaohua.performancetesting.common.Result;
+import com.xiaohua.performancetesting.config.MyBatisPlusConfig;
 import com.xiaohua.performancetesting.entity.Goods;
 import com.xiaohua.performancetesting.entity.Orders;
 import com.xiaohua.performancetesting.entity.User;
@@ -16,16 +18,28 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Tag(name = "Admin", description = "管理端接口 — 用户/商品/订单管理（需管理员 Token）")
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
+
+    /** user.username -> VARCHAR(50)，user.password -> VARCHAR(100) */
+    private static final int MAX_USERNAME_LEN = 50;
+    private static final int MAX_PASSWORD_LEN = 100;
+    /** goods.goods_name -> VARCHAR(200) */
+    private static final int MAX_GOODS_NAME_LEN = 200;
+    /** goods.price -> DECIMAL(10,2) */
+    private static final BigDecimal MAX_PRICE = new BigDecimal("99999999.99");
 
     private final UserService userService;
     private final GoodsService goodsService;
@@ -43,26 +57,37 @@ public class AdminController {
     // ==================== User Management ====================
 
     @Operation(
-        summary = "用户列表",
-        description = "查询所有用户，支持按用户名模糊搜索。不传 keyword 时返回全部用户（密码字段已脱敏）。"
+        summary = "用户列表（分页）",
+        description = """
+            分页查询用户，支持按用户名模糊搜索（密码字段已脱敏）。
+
+            - `page`：页码，从 1 开始（传 0/负数按 1 处理）
+            - `size`：每页条数，默认 20，上限 200（超出自动夹住）
+            - 返回结构：`data = {records, total, page, size, pages}`
+            """
     )
     @ApiResponse(responseCode = "200", description = "成功")
     @ApiResponse(responseCode = "401", description = "Token 缺失或无效")
     @ApiResponse(responseCode = "403", description = "非管理员无权限")
     @GetMapping("/users")
-    public Result<List<User>> listUsers(@RequestParam(required = false) String keyword) {
+    public Result<PageResult<User>> listUsers(@RequestParam(required = false) String keyword,
+                                              @RequestParam(defaultValue = "1") long page,
+                                              @RequestParam(defaultValue = "10") long size) {
         LambdaQueryWrapper<User> w = new LambdaQueryWrapper<>();
-        if (StringUtils.hasText(keyword)) w.like(User::getUsername, keyword);
+        if (StringUtils.hasText(keyword)) w.like(User::getUsername, keyword.trim());
         w.orderByAsc(User::getId);
-        List<User> users = userService.list(w);
-        users.forEach(u -> u.setPassword(null));
-        return Result.ok(users);
+
+        Page<User> pg = userService.page(new Page<>(normalizePage(page), normalizeSize(size)), w);
+        pg.getRecords().forEach(u -> u.setPassword(null));
+        return Result.ok(PageResult.of(pg));
     }
 
     @Operation(
         summary = "新增用户",
         description = """
             创建新用户。密码明文存储（演示项目），role 默认为 0（普通用户）。
+
+            校验：username / password 必填，role 只能是 0 或 1，用户名不可重复。
 
             **请求体示例**：`{"username":"newUser","password":"123456","role":0}`
             """
@@ -74,16 +99,35 @@ public class AdminController {
         )
     )
     @ApiResponse(responseCode = "200", description = "创建成功")
+    @ApiResponse(responseCode = "400", description = "参数缺失或非法")
     @ApiResponse(responseCode = "500", description = "用户名已存在")
     @PostMapping(value = "/users", consumes = "application/json")
     public Result<?> createUser(@RequestBody User user, HttpServletRequest request) {
-        if (userService.getOne(new LambdaQueryWrapper<User>().eq(User::getUsername, user.getUsername())) != null) {
+        String username = user.getUsername() == null ? "" : user.getUsername().trim();
+        String password = user.getPassword();
+        Integer role = user.getRole() == null ? 0 : user.getRole();
+
+        if (username.isEmpty()) return Result.fail(400, "username is required");
+        if (username.length() > MAX_USERNAME_LEN) return Result.fail(400, "username too long (max " + MAX_USERNAME_LEN + ")");
+        if (!StringUtils.hasText(password)) return Result.fail(400, "password is required");
+        if (password.length() > MAX_PASSWORD_LEN) return Result.fail(400, "password too long (max " + MAX_PASSWORD_LEN + ")");
+        if (!isValidRole(role)) return Result.fail(400, "role must be 0 or 1");
+
+        if (findByUsername(username) != null) return Result.fail("username already exists");
+
+        user.setId(null);
+        user.setUsername(username);
+        user.setRole(role);
+        user.setCreateTime(LocalDateTime.now());
+        try {
+            userService.save(user);
+        } catch (DuplicateKeyException e) {
+            // 并发创建同名用户时由数据库唯一索引兜底
             return Result.fail("username already exists");
         }
-        user.setId(null);
-        if (user.getRole() == null) user.setRole(0);
-        userService.save(user);
-        logService.log(getAdminId(request), getAdminName(request), "CREATE_USER", "username=" + user.getUsername());
+
+        logService.log(getAdminId(request), getAdminName(request), "CREATE_USER",
+                "创建用户 #" + user.getId() + " " + username + "（角色: " + roleText(role) + "）");
         user.setPassword(null);
         return Result.ok("created", user);
     }
@@ -92,118 +136,376 @@ public class AdminController {
         summary = "编辑用户",
         description = """
             更新用户信息。可修改密码和角色，用户名不允许修改。
-            密码为空时不更新密码字段。
+            密码为空（或不传）时不更新密码字段。
+
+            保护规则：不能取消自己的管理员角色；系统必须至少保留一个管理员。
 
             **请求体示例**：`{"password":"newPassword","role":1}`
             """
     )
     @ApiResponse(responseCode = "200", description = "更新成功")
-    @ApiResponse(responseCode = "500", description = "用户不存在")
+    @ApiResponse(responseCode = "400", description = "参数非法")
+    @ApiResponse(responseCode = "500", description = "用户不存在 / 违反保护规则")
     @PutMapping(value = "/users/{id}", consumes = "application/json")
     public Result<?> updateUser(@PathVariable Long id, @RequestBody User user, HttpServletRequest request) {
         User db = userService.getById(id);
         if (db == null) return Result.fail("user not found");
-        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-            // plaintext stored directly (demo project)
-        } else {
-            user.setPassword(null);
+
+        Integer role = user.getRole();
+        String password = user.getPassword();
+        if (role == null && !StringUtils.hasText(password)) return Result.fail(400, "nothing to update: password or role is required");
+        if (role != null && !isValidRole(role)) return Result.fail(400, "role must be 0 or 1");
+        // 只传空白（多空格）密码时视为“不修改”，不能把空格存成密码
+        if (password != null && !StringUtils.hasText(password)) password = null;
+        if (password != null && password.length() > MAX_PASSWORD_LEN) return Result.fail(400, "password too long (max " + MAX_PASSWORD_LEN + ")");
+
+        if (role != null && role == 0 && isAdmin(db)) {
+            if (id.equals(getAdminId(request))) return Result.fail("cannot remove admin role from your own account");
+            if (countAdmins() <= 1) return Result.fail("at least one admin account is required");
         }
+
         user.setId(id);
-        user.setUsername(null); // username not updatable
-        userService.updateById(user);
-        logService.log(getAdminId(request), getAdminName(request), "UPDATE_USER", "id=" + id);
+        user.setUsername(null);      // username not updatable
+        user.setPassword(password);  // null -> field skipped by MyBatis-Plus
+        user.setCreateTime(null);    // 不允许请求体覆盖创建时间
+        // 注意：MySQL 默认只统计“实际变更行”，值未变化时 updateById 返回 false，不能当成记录不存在
+        if (!userService.updateById(user) && userService.getById(id) == null) return Result.fail("user not found");
+
+        // 日志要能说清“改的是谁、改了哪些字段、从什么改成什么”
+        List<String> changes = new ArrayList<>();
+        if (role != null && !role.equals(db.getRole())) {
+            changes.add("角色 " + roleText(db.getRole()) + "→" + roleText(role));
+        }
+        if (password != null) {
+            changes.add("密码已重置");
+        }
+        logService.log(getAdminId(request), getAdminName(request), "UPDATE_USER",
+                "编辑用户 #" + id + " " + db.getUsername() + (changes.isEmpty() ? "（无实际变更）" : "：" + String.join("；", changes)));
         return Result.ok("updated", null);
     }
 
     @Operation(
         summary = "删除用户",
-        description = "根据用户 ID 删除用户。"
+        description = """
+            根据用户 ID 删除用户。
+
+            保护规则：不能删除当前登录的管理员自己；不能删除最后一个管理员；
+            该用户已有订单时不允许删除（避免订单表出现无效 user_id）。
+            """
     )
     @ApiResponse(responseCode = "200", description = "删除成功")
-    @ApiResponse(responseCode = "500", description = "用户不存在")
+    @ApiResponse(responseCode = "500", description = "用户不存在 / 违反保护规则")
     @DeleteMapping("/users/{id}")
     public Result<?> deleteUser(@PathVariable Long id, HttpServletRequest request) {
-        if (userService.getById(id) == null) return Result.fail("user not found");
+        User db = userService.getById(id);
+        if (db == null) return Result.fail("user not found");
+        if (id.equals(getAdminId(request))) return Result.fail("cannot delete your own account");
+        if (isAdmin(db) && countAdmins() <= 1) return Result.fail("at least one admin account is required");
+        if (countOrders(Orders::getUserId, id) > 0) return Result.fail("user still has orders, delete orders first");
         userService.removeById(id);
-        logService.log(getAdminId(request), getAdminName(request), "DELETE_USER", "id=" + id);
+        logService.log(getAdminId(request), getAdminName(request), "DELETE_USER",
+                "删除用户 #" + id + " " + db.getUsername() + "（角色: " + roleText(db.getRole()) + "）");
         return Result.ok("deleted", null);
     }
 
     // ==================== Goods Management ====================
 
     @Operation(
+        summary = "商品列表（管理端）",
+        description = "管理端商品面板专用，支持按商品名模糊搜索，固定按 id 升序。返回分页体 {records,total,page,size,pages}，每页默认 10 条。"
+    )
+    @ApiResponse(responseCode = "200", description = "成功")
+    @ApiResponse(responseCode = "401", description = "Token 缺失或无效")
+    @ApiResponse(responseCode = "403", description = "非管理员无权限")
+    @GetMapping("/goods")
+    public Result<PageResult<Goods>> listGoods(@RequestParam(required = false) String keyword,
+                                                @RequestParam(defaultValue = "1") long page,
+                                                @RequestParam(defaultValue = "10") long size) {
+        LambdaQueryWrapper<Goods> w = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) w.like(Goods::getGoodsName, keyword.trim());
+        // 顺序必须稳定，否则翻页会重复/漏行
+        w.orderByAsc(Goods::getId);
+        Page<Goods> pg = goodsService.page(new Page<>(normalizePage(page), normalizeSize(size)), w);
+        return Result.ok(PageResult.of(pg));
+    }
+
+    @Operation(
         summary = "新增商品",
-        description = "创建新商品。请求体示例：`{\"goodsName\":\"笔记本电脑\",\"price\":5999.00,\"stock\":50}`"
+        description = """
+            创建新商品。校验：goodsName 必填、price >= 0、stock >= 0。
+
+            请求体示例：`{"goodsName":"笔记本电脑","price":5999.00,"stock":50}`
+            """
     )
     @ApiResponse(responseCode = "200", description = "创建成功")
+    @ApiResponse(responseCode = "400", description = "参数非法")
     @PostMapping(value = "/goods", consumes = "application/json")
     public Result<?> createGoods(@RequestBody Goods goods, HttpServletRequest request) {
+        String err = validateGoods(goods, false);
+        if (err != null) return Result.fail(400, err);
+
         goods.setId(null);
+        goods.setGoodsName(goods.getGoodsName().trim());
+        // 统一成两位小数：否则请求里的 5 / 5.0 / 5.00 会原样回显，与库里 DECIMAL(10,2) 和日志不一致
+        goods.setPrice(goods.getPrice().setScale(2, RoundingMode.HALF_UP));
+        goods.setCreateTime(LocalDateTime.now());
         goodsService.save(goods);
-        logService.log(getAdminId(request), getAdminName(request), "CREATE_GOODS", "name=" + goods.getGoodsName());
+
+        logService.log(getAdminId(request), getAdminName(request), "CREATE_GOODS",
+                "新增商品 #" + goods.getId() + " " + goods.getGoodsName()
+                        + "（单价 " + plain(goods.getPrice()) + "，库存 " + goods.getStock() + "）");
         return Result.ok("created", goods);
     }
 
     @Operation(
         summary = "编辑商品",
-        description = "更新商品信息（名称、价格、库存）。请求体示例：`{\"goodsName\":\"笔记本电脑\",\"price\":4999.00,\"stock\":30}`"
+        description = "更新商品信息（名称、价格、库存）。字段为空时不更新该字段。请求体示例：`{\"goodsName\":\"笔记本电脑\",\"price\":4999.00,\"stock\":30}`"
     )
     @ApiResponse(responseCode = "200", description = "更新成功")
+    @ApiResponse(responseCode = "400", description = "参数非法")
     @ApiResponse(responseCode = "500", description = "商品不存在")
     @PutMapping(value = "/goods/{id}", consumes = "application/json")
     public Result<?> updateGoods(@PathVariable Long id, @RequestBody Goods goods, HttpServletRequest request) {
-        if (goodsService.getById(id) == null) return Result.fail("goods not found");
+        Goods db = goodsService.getById(id);
+        if (db == null) return Result.fail("goods not found");
+        if (goods.getGoodsName() == null && goods.getPrice() == null && goods.getStock() == null) {
+            return Result.fail(400, "nothing to update: goodsName, price or stock is required");
+        }
+        String err = validateGoods(goods, true);
+        if (err != null) return Result.fail(400, err);
+
         goods.setId(id);
-        goodsService.updateById(goods);
-        logService.log(getAdminId(request), getAdminName(request), "UPDATE_GOODS", "id=" + id);
+        if (goods.getGoodsName() != null) goods.setGoodsName(goods.getGoodsName().trim());
+        if (goods.getPrice() != null) goods.setPrice(goods.getPrice().setScale(2, RoundingMode.HALF_UP));
+        goods.setCreateTime(null);
+        if (!goodsService.updateById(goods) && goodsService.getById(id) == null) return Result.fail("goods not found");
+
+        List<String> changes = new ArrayList<>();
+        String newName = goods.getGoodsName();
+        BigDecimal newPrice = goods.getPrice();
+        Integer newStock = goods.getStock();
+        if (newName != null && !newName.equals(db.getGoodsName())) {
+            changes.add("名称 " + db.getGoodsName() + "→" + newName);
+        }
+        if (newPrice != null && db.getPrice() != null && newPrice.compareTo(db.getPrice()) != 0) {
+            changes.add("单价 " + plain(db.getPrice()) + "→" + plain(newPrice));
+        }
+        if (newStock != null && !newStock.equals(db.getStock())) {
+            changes.add("库存 " + db.getStock() + "→" + newStock);
+        }
+        logService.log(getAdminId(request), getAdminName(request), "UPDATE_GOODS",
+                "编辑商品 #" + id + " " + db.getGoodsName() + (changes.isEmpty() ? "（无实际变更）" : "：" + String.join("；", changes)));
         return Result.ok("updated", null);
     }
 
     @Operation(
         summary = "删除商品",
-        description = "根据商品 ID 删除商品。"
+        description = "根据商品 ID 删除商品。该商品已有订单时不允许删除（避免订单表出现无效 goods_id）。"
     )
     @ApiResponse(responseCode = "200", description = "删除成功")
-    @ApiResponse(responseCode = "500", description = "商品不存在")
+    @ApiResponse(responseCode = "500", description = "商品不存在 / 已存在关联订单")
     @DeleteMapping("/goods/{id}")
     public Result<?> deleteGoods(@PathVariable Long id, HttpServletRequest request) {
-        if (goodsService.getById(id) == null) return Result.fail("goods not found");
+        Goods db = goodsService.getById(id);
+        if (db == null) return Result.fail("goods not found");
+        long related = countOrders(Orders::getGoodsId, id);
+        if (related > 0) return Result.fail("goods still has orders, delete orders first");
+
         goodsService.removeById(id);
-        logService.log(getAdminId(request), getAdminName(request), "DELETE_GOODS", "id=" + id);
+        logService.log(getAdminId(request), getAdminName(request), "DELETE_GOODS",
+                "删除商品 #" + id + " " + db.getGoodsName() + "（单价 " + plain(db.getPrice()) + "，原库存 " + db.getStock() + "）");
         return Result.ok("deleted", null);
     }
 
     // ==================== Order Management ====================
 
     @Operation(
-        summary = "全部订单列表",
-        description = "查询所有订单，支持按订单号模糊搜索。不传 keyword 时返回全部订单（按创建时间倒序）。"
+        summary = "全部订单列表（分页）",
+        description = """
+            分页查询全部订单，默认按下单时间倒序。
+
+            - `keyword`：按订单号模糊搜索
+            - `status`：0=未支付 / 1=已支付，不传为全部
+            - `page`：从 1 开始；`size`：默认 20，上限 200
+            - 返回结构：`data = {records, total, page, size, pages}`
+            """
     )
+    @ApiResponse(responseCode = "200", description = "成功")
+    @ApiResponse(responseCode = "400", description = "status 非法")
     @GetMapping("/orders")
-    public Result<List<Orders>> listOrders(@RequestParam(required = false) String keyword) {
-        LambdaQueryWrapper<Orders> w = new LambdaQueryWrapper<Orders>().orderByDesc(Orders::getCreateTs);
-        if (StringUtils.hasText(keyword)) w.like(Orders::getOrderNo, keyword);
-        return Result.ok(orderService.list(w));
+    public Result<PageResult<Orders>> listOrders(@RequestParam(required = false) String keyword,
+                                                 @RequestParam(required = false) Integer status,
+                                                 @RequestParam(defaultValue = "1") long page,
+                                                 @RequestParam(defaultValue = "10") long size) {
+        if (status != null && status != 0 && status != 1) return Result.fail(400, "status must be 0 or 1");
+
+        LambdaQueryWrapper<Orders> w = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) w.like(Orders::getOrderNo, keyword.trim());
+        if (status != null) w.eq(Orders::getStatus, status);
+        // 同一毫秒会下大量单（压测场景），create_ts 相同时用 id 兼做稳定排序，否则翻页会重复/漏行
+        w.orderByDesc(Orders::getCreateTs).orderByDesc(Orders::getId);
+
+        Page<Orders> pg = orderService.page(new Page<>(normalizePage(page), normalizeSize(size)), w);
+        return Result.ok(PageResult.of(pg));
     }
 
     @Operation(
-        summary = "标记订单已支付",
-        description = "将指定订单的状态从 0（未支付）更新为 1（已支付）。"
+        summary = "删除订单",
+        description = """
+            根据订单 ID 删除订单，并记录完整快照（订单号/用户/商品/金额/状态）。
+
+            存在意义：用户/商品有订单时不允许删除（防止无效外键），管理员需要能先清掉相关订单。
+            """
     )
-    @ApiResponse(responseCode = "200", description = "支付成功")
+    @ApiResponse(responseCode = "200", description = "删除成功")
     @ApiResponse(responseCode = "500", description = "订单不存在")
-    @PutMapping(value = "/orders/{id}/pay", consumes = "application/json")
-    public Result<?> payOrder(@PathVariable Long id, HttpServletRequest request) {
-        if (orderService.getById(id) == null) return Result.fail("order not found");
-        orderService.update(new LambdaUpdateWrapper<Orders>().eq(Orders::getId, id).set(Orders::getStatus, 1));
-        logService.log(getAdminId(request), getAdminName(request), "PAY_ORDER", "orderId=" + id);
-        return Result.ok("paid", null);
+    @DeleteMapping("/orders/{id}")
+    public Result<?> deleteOrder(@PathVariable Long id, HttpServletRequest request) {
+        Orders db = orderService.getById(id);
+        if (db == null) return Result.fail("order not found");
+
+        orderService.removeById(id);
+        logService.log(getAdminId(request), getAdminName(request), "DELETE_ORDER", "删除订单：" + orderBrief(db));
+        return Result.ok("deleted", null);
     }
 
+    /** 批量删除某用户/某商品的全部订单（只删属于该目标的订单，带精确条件不会误删） */
+    @Operation(
+        summary = "按用户或商品清理订单",
+        description = "删除 userId 或 goodsId 指定的全部订单（事次参数传其一），返回实际删除条数，供“删除用户/商品前清理订单”使用。"
+    )
+    @DeleteMapping("/orders")
+    public Result<?> deleteOrders(@RequestParam(required = false) Long userId,
+                                  @RequestParam(required = false) Long goodsId,
+                                  HttpServletRequest request) {
+        if (userId == null && goodsId == null) {
+            return Result.fail(400, "userId or goodsId is required");
+        }
+        // 每个查询都用独立的 wrapper：不 clone、不复用，避免 last("LIMIT 5") 之类的修饰渗进 DELETE 条件
+        // （那样会把“清理 5000 条”静默变成只删 5 条，而接口和日志还报 5000）
+        List<Orders> sample = orderService.list(orderScope(userId, goodsId)
+                .select(Orders::getId, Orders::getOrderNo, Orders::getPayPrice, Orders::getStatus)
+                .orderByAsc(Orders::getId)
+                .last("LIMIT 5"));
+        int matched = orderService.deleteBy(orderScope(userId, goodsId));
+        if (matched == 0) return Result.ok("no orders matched", 0);
+
+        // 日志记的是真实删除行数，不是删除前的 count 快照（并发下两者会不一致）
+        StringBuilder detail = new StringBuilder("批量删除订单 " + matched + " 条（"
+                + (userId != null ? "用户 #" + userId : "商品 #" + goodsId) + "）");
+        if (!sample.isEmpty()) {
+            detail.append("：");
+            for (int i = 0; i < sample.size(); i++) {
+                Orders o = sample.get(i);
+                if (i > 0) detail.append('，');
+                detail.append('#').append(o.getId()).append(' ')
+                        .append(o.getOrderNo())
+                        .append("(¥").append(o.getPayPrice() == null ? "-" : o.getPayPrice().toPlainString())
+                        .append(Integer.valueOf(1).equals(o.getStatus()) ? ",已支付)" : ",未支付)");
+            }
+            if (matched > sample.size()) {
+                detail.append(" 等共 ").append(matched).append(" 条");
+            }
+        }
+        logService.log(getAdminId(request), getAdminName(request), "DELETE_ORDER", detail.toString());
+        return Result.ok("deleted", matched);
+    }
+
+    /** 订单过滤条件（每次调用返回全新 wrapper，供取样/删除各自使用） */
+    private LambdaQueryWrapper<Orders> orderScope(Long userId, Long goodsId) {
+        LambdaQueryWrapper<Orders> w = new LambdaQueryWrapper<>();
+        if (userId != null) w.eq(Orders::getUserId, userId);
+        if (goodsId != null) w.eq(Orders::getGoodsId, goodsId);
+        return w;
+    }
+
+
     // ==================== Helpers ====================
+    /** 页码归一：从 1 开始，非法值按 1 处理（不让 0/负数传到 SQL） */
+    static long normalizePage(long page) {
+        return page < 1 ? 1 : page;
+    }
+
+    /** 每页条数归一：1 ~ MAX_PAGE_SIZE */
+    static long normalizeSize(long size) {
+        if (size < 1) return 1;
+        return Math.min(size, MyBatisPlusConfig.MAX_PAGE_SIZE);
+    }
+
+    private String roleText(Integer role) {
+        return Integer.valueOf(1).equals(role) ? "管理员" : "普通用户";
+    }
+
+    /** BigDecimal 输出不带多余的 0，也不走科学计数法 */
+    private String plain(BigDecimal v) {
+        return v == null ? "-" : v.toPlainString();
+    }
+
+    /** 订单快照：足够回答“哪一笔订单、谁买的、买的什么、多少钱、什么状态” */
+    private String orderBrief(Orders o) {
+        if (o == null) return "订单 #不存在";
+        return "#" + o.getId() + " 订单号 " + o.getOrderNo()
+                + "（用户 #" + o.getUserId() + "，商品 #" + o.getGoodsId()
+                + "，金额 " + plain(o.getPayPrice())
+                + "，" + (Integer.valueOf(1).equals(o.getStatus()) ? "已支付" : "未支付") + "）";
+    }
+
+    private boolean isValidRole(Integer role) {
+        return role != null && (role == 0 || role == 1);
+    }
+
+    private boolean isAdmin(User user) {
+        return user != null && Integer.valueOf(1).equals(user.getRole());
+    }
+
+    private long countAdmins() {
+        return userService.count(new LambdaQueryWrapper<User>().eq(User::getRole, 1));
+    }
+
+    private User findByUsername(String username) {
+        return userService.getOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username), false);
+    }
+
+    private long countOrders(com.baomidou.mybatisplus.core.toolkit.support.SFunction<Orders, ?> column, Long value) {
+        return orderService.count(new LambdaQueryWrapper<Orders>().eq(column, value));
+    }
+
+    /**
+     * @param partial true 时允许字段为空（只校验传入的字段，MyBatis-Plus 会跳过 null 字段）
+     */
+    private String validateGoods(Goods goods, boolean partial) {
+        String name = goods.getGoodsName();
+        if (name == null || name.trim().isEmpty()) {
+            if (!partial) return "goodsName is required";
+        } else if (name.trim().length() > MAX_GOODS_NAME_LEN) {
+            return "goodsName too long (max " + MAX_GOODS_NAME_LEN + ")";
+        }
+
+        BigDecimal price = goods.getPrice();
+        if (price == null) {
+            if (!partial) return "price is required";
+        } else if (price.compareTo(BigDecimal.ZERO) < 0) {
+            return "price must be greater than or equal to 0";
+        } else if (price.compareTo(MAX_PRICE) > 0) {
+            return "price too large (max " + MAX_PRICE + ")";
+        } else if (price.scale() > 2) {
+            // DECIMAL(10,2) 会静四舍五入，管理员以为保存了 9.999 实际变成 10.00
+            return "price supports at most 2 decimal places";
+        }
+
+        Integer stock = goods.getStock();
+        if (stock == null) {
+            if (!partial) return "stock is required";
+        } else if (stock < 0) {
+            return "stock must be greater than or equal to 0";
+        }
+
+        return null;
+    }
 
     private Long getAdminId(HttpServletRequest request) {
-        return (Long) request.getAttribute("userId");
+        Object userId = request.getAttribute("userId");
+        return userId instanceof Long ? (Long) userId : null;
     }
 
     private String getAdminName(HttpServletRequest request) {

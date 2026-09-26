@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理后台 - 速购商城</title>
-    <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="/css/admin.css">
+    <link rel="stylesheet" href="/css/style.css?v=9">
+    <link rel="stylesheet" href="/css/admin.css?v=9">
 </head>
 <body>
 <div class="admin-layout">
@@ -13,15 +13,15 @@
         <div class="sidebar-logo">速购商城</div>
         <div class="sidebar-sub">管理后台</div>
         <nav class="sidebar-nav">
-            <a class="nav-item active" data-panel="dashboard" onclick="switchPanel('dashboard')">系统概览</a>
-            <a class="nav-item" data-panel="users" onclick="switchPanel('users')">用户管理</a>
-            <a class="nav-item" data-panel="goods" onclick="switchPanel('goods')">商品管理</a>
-            <a class="nav-item" data-panel="orders" onclick="switchPanel('orders')">订单管理</a>
-            <a class="nav-item" data-panel="logs" onclick="switchPanel('logs')">操作日志</a>
+            <a class="nav-item active" href="#/dashboard" data-panel="dashboard">系统概览</a>
+            <a class="nav-item" href="#/users" data-panel="users">用户管理</a>
+            <a class="nav-item" href="#/goods" data-panel="goods">商品管理</a>
+            <a class="nav-item" href="#/orders" data-panel="orders">订单管理</a>
+            <a class="nav-item" href="#/logs" data-panel="logs">操作日志</a>
         </nav>
         <div class="sidebar-footer">
             <span id="adminName"></span>
-            <button class="btn btn-sm" onclick="logout()" style="background:rgba(255,255,255,0.2);color:#fff;margin-top:8px;width:100%;">退出登录</button>
+            <button class="btn btn-sm btn-ghost" id="logoutBtn" type="button" style="margin-top:8px;width:100%;">退出登录</button>
         </div>
     </aside>
 
@@ -29,46 +29,89 @@
 
         <!-- Dashboard -->
         <div id="panel-dashboard" class="panel">
-            <h2 class="panel-title">系统概览</h2>
+            <div class="panel-head">
+                <h2 class="panel-title">系统概览</h2>
+                <div class="dash-tools">
+                    <label class="dash-tool">自动刷新
+                        <select id="dashAuto">
+                            <option value="0">关闭</option>
+                            <option value="5">5 秒</option>
+                            <option value="10">10 秒</option>
+                            <option value="30">30 秒</option>
+                        </select>
+                    </label>
+                    <label class="dash-tool">速率窗口
+                        <select id="dashWin">
+                            <option value="1">近 1 分钟</option>
+                            <option value="5">近 5 分钟</option>
+                            <option value="15">近 15 分钟</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary btn-sm" id="dashRefresh" type="button">刷新</button>
+                    <span class="dash-sep"></span>
+                    <button class="btn btn-sm btn-danger-ghost" id="dbResetBtn" type="button"
+                            title="压测跑完一轮后一键回到初始状态：重建四张表（含索引）并重新灌入初始数据，不用重启服务。需要输入 RESET 确认">
+                        系统重置
+                    </button>
+                </div>
+            </div>
+            <div class="dash-meta" id="dashMeta">加载中...</div>
+
+            <h3 class="dash-group">业务数据</h3>
+            <div class="metric-grid" id="bizGrid"><div class="dash-loading">加载中...</div></div>
+
+            <h3 class="dash-group">JVM 运行时</h3>
+            <div class="heap-card" id="heapCard"></div>
             <div class="status-grid" id="statusGrid">加载中...</div>
+
+            <h3 class="dash-group">最近操作
+                <a class="dash-more" href="#/logs">查看全部 &rarr;</a>
+            </h3>
+            <div class="recent-box" id="recentBox">加载中...</div>
         </div>
 
         <!-- Users -->
         <div id="panel-users" class="panel" style="display:none;">
-            <h2 class="panel-title">用户管理</h2>
+            <div class="panel-head">
+                <h2 class="panel-title">用户管理</h2>
+                <button class="btn btn-primary btn-sm" id="addUserBtn" type="button">+ 新增</button>
+            </div>
             <div class="toolbar">
                 <div class="search-bar" style="margin-bottom:0;">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="userSearch" placeholder="搜索用户名..." onkeydown="if(event.key==='Enter')loadUsers()" oninput="toggleClear('userSearch','userClear')">
+                    <input type="text" id="userSearch" placeholder="搜索用户名..." onkeydown="if(event.key==='Enter')gotoPageAndReload('users', loadUsers)" oninput="toggleClear('userSearch','userClear')">
                     <span class="search-clear" id="userClear" onclick="clearSearch('userSearch','userClear',loadUsers)">&times;</span>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="showUserModal()">+ 新增用户</button>
             </div>
             <div class="table-wrapper">
                 <table>
-                    <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>
+                    <thead><tr><th class="num">ID</th><th>用户名</th><th>角色</th><th class="cell-time">创建时间</th><th class="col-actions">操作</th></tr></thead>
                     <tbody id="usersBody"></tbody>
                 </table>
             </div>
+            <div class="pager" id="usersPager"></div>
         </div>
 
         <!-- Goods -->
         <div id="panel-goods" class="panel" style="display:none;">
-            <h2 class="panel-title">商品管理</h2>
+            <div class="panel-head">
+                <h2 class="panel-title">商品管理</h2>
+                <button class="btn btn-primary btn-sm" id="addGoodsBtn" type="button">+ 新增</button>
+            </div>
             <div class="toolbar">
                 <div class="search-bar" style="margin-bottom:0;">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="goodsSearch" placeholder="搜索商品名称..." onkeydown="if(event.key==='Enter')loadAdminGoods()" oninput="toggleClear('goodsSearch','goodsClear')">
-                    <span class="search-clear" id="goodsClear" onclick="clearSearch('goodsSearch','goodsClear',loadAdminGoods)">&times;</span>
+                    <input type="text" id="goodsSearch" placeholder="搜索商品名称..." onkeydown="if(event.key==='Enter')gotoPageAndReload('goods', loadAdminGoods)" oninput="toggleClear('goodsSearch','goodsClear')">
+                    <span class="search-clear" id="goodsClear" onclick="clearSearch('goodsSearch','goodsClear',function(){ gotoPageAndReload('goods', loadAdminGoods); })">&times;</span>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="showGoodsModal()">+ 新增商品</button>
             </div>
             <div class="table-wrapper">
                 <table>
-                    <thead><tr><th>ID</th><th>商品名称</th><th>单价</th><th>库存</th><th>创建时间</th><th>操作</th></tr></thead>
+                    <thead><tr><th class="num">ID</th><th>商品名称</th><th class="num">单价</th><th class="num">库存</th><th class="cell-time">创建时间</th><th class="col-actions">操作</th></tr></thead>
                     <tbody id="goodsBody"></tbody>
                 </table>
             </div>
+            <div class="pager" id="goodsPager"></div>
         </div>
 
         <!-- Orders -->
@@ -77,34 +120,48 @@
             <div class="toolbar">
                 <div class="search-bar" style="margin-bottom:0;">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="orderSearch" placeholder="搜索订单编号..." onkeydown="if(event.key==='Enter')loadAdminOrders()" oninput="toggleClear('orderSearch','orderClear')">
+                    <input type="text" id="orderSearch" placeholder="搜索订单编号..." onkeydown="if(event.key==='Enter')gotoPageAndReload('orders', loadAdminOrders)" oninput="toggleClear('orderSearch','orderClear')">
                     <span class="search-clear" id="orderClear" onclick="clearSearch('orderSearch','orderClear',loadAdminOrders)">&times;</span>
                 </div>
+                <select class="filter-select" id="orderStatus" onchange="gotoPageAndReload('orders', loadAdminOrders)">
+                    <option value="">全部状态</option>
+                    <option value="0">未支付</option>
+                    <option value="1">已支付</option>
+                </select>
             </div>
+            <p class="hint">支付由用户在「我的订单」里自己确认；管理端只保留订单删除/清理能力。</p>
             <div class="table-wrapper">
                 <table>
-                    <thead><tr><th>订单编号</th><th>用户ID</th><th>商品ID</th><th>金额</th><th>时间</th><th>状态</th><th>操作</th></tr></thead>
+                    <thead><tr><th>订单编号</th><th class="num">用户ID</th><th class="num">商品ID</th><th class="num">金额</th><th class="cell-time">时间</th><th>状态</th><th class="col-actions">操作</th></tr></thead>
                     <tbody id="adminOrdersBody"></tbody>
                 </table>
             </div>
+            <div class="pager" id="ordersPager"></div>
         </div>
 
         <!-- Logs -->
         <div id="panel-logs" class="panel" style="display:none;">
-            <h2 class="panel-title">操作日志</h2>
+            <div class="panel-head">
+                <h2 class="panel-title">操作日志</h2>
+                <span class="hint">管理员操作始终记录；普通用户的登录/下单/支付/退出由配置 operation-log.user-actions-enabled 控制（压测基线时可关闭）</span>
+            </div>
             <div class="toolbar">
                 <div class="search-bar" style="margin-bottom:0;">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="logSearch" placeholder="搜索用户名或操作..." onkeydown="if(event.key==='Enter')loadLogs()" oninput="toggleClear('logSearch','logClear')">
-                    <span class="search-clear" id="logClear" onclick="clearSearch('logSearch','logClear',loadLogs)">&times;</span>
+                    <input type="text" id="logSearch" placeholder="搜索操作人、操作类型、详情或 IP..." onkeydown="if(event.key==='Enter')gotoPageAndReload('logs', loadLogs)" oninput="toggleClear('logSearch','logClear')">
+                    <span class="search-clear" id="logClear" onclick="clearSearch('logSearch','logClear',function(){ gotoPageAndReload('logs', loadLogs); })">&times;</span>
                 </div>
+                <select class="filter-select" id="logAction" onchange="gotoPageAndReload('logs', loadLogs)">
+                    <option value="">全部操作类型</option>
+                </select>
             </div>
             <div class="table-wrapper">
                 <table>
-                    <thead><tr><th>ID</th><th>操作人</th><th>操作类型</th><th>详情</th><th>时间</th></tr></thead>
+                    <thead><tr><th class="num">ID</th><th>操作人</th><th>角色</th><th class="cell-action">操作类型</th><th>详情</th><th class="cell-ip">IP</th><th class="cell-time">时间</th></tr></thead>
                     <tbody id="logsBody"></tbody>
                 </table>
             </div>
+            <div class="pager" id="logsPager"></div>
         </div>
 
     </main>
@@ -114,13 +171,13 @@
 <div class="modal-overlay" id="userModal" style="display:none;">
     <div class="modal">
         <h3 id="userModalTitle">新增用户</h3>
-        <div class="form-group"><label>用户名</label><input type="text" id="uUsername"></div>
-        <div class="form-group"><label>密码</label><input type="password" id="uPassword" placeholder="留空则不修改"></div>
+        <div class="form-group"><label>用户名</label><input type="text" id="uUsername" maxlength="50"></div>
+        <div class="form-group"><label>密码</label><input type="password" id="uPassword" maxlength="100" placeholder="留空则不修改"></div>
         <div class="form-group"><label>角色</label><select id="uRole"><option value="0">普通用户</option><option value="1">管理员</option></select></div>
         <input type="hidden" id="uId">
         <div class="modal-actions">
             <button class="btn btn-sm" onclick="closeUserModal()" style="background:#f5f5f5;">取消</button>
-            <button class="btn btn-primary btn-sm" onclick="saveUser()">保存</button>
+            <button class="btn btn-primary btn-sm" id="userSaveBtn" onclick="saveUser()">保存</button>
         </div>
     </div>
 </div>
@@ -129,22 +186,54 @@
 <div class="modal-overlay" id="goodsModal" style="display:none;">
     <div class="modal">
         <h3 id="goodsModalTitle">新增商品</h3>
-        <div class="form-group"><label>商品名称</label><input type="text" id="gName"></div>
-        <div class="form-group"><label>单价</label><input type="number" step="0.01" id="gPrice"></div>
-        <div class="form-group"><label>库存</label><input type="number" id="gStock"></div>
+        <div class="form-group"><label>商品名称</label><input type="text" id="gName" maxlength="200"></div>
+        <div class="form-group"><label>单价</label><input type="number" step="0.01" min="0" id="gPrice"></div>
+        <div class="form-group"><label>库存</label><input type="number" min="0" id="gStock"></div>
         <input type="hidden" id="gId">
         <div class="modal-actions">
             <button class="btn btn-sm" onclick="closeGoodsModal()" style="background:#f5f5f5;">取消</button>
-            <button class="btn btn-primary btn-sm" onclick="saveGoods()">保存</button>
+            <button class="btn btn-primary btn-sm" id="goodsSaveBtn" onclick="saveGoods()">保存</button>
         </div>
     </div>
 </div>
 
-<script src="/js/api.js"></script>
+<script src="/js/api.js?v=9"></script>
 <script>
-if (!isLoggedIn() || !isAdmin()) { window.location.replace('/login.html'); }
-document.getElementById('adminName').textContent = getUsername();
-loadDashboard();
+// 页面守卫：未登录去登录页；已登录但不是管理员回商城（而不是被踢回登录页）
+var adminReady = isLoggedIn() && isAdmin();
+if (!adminReady) {
+    window.location.replace(isLoggedIn() ? '/index.html' : '/login.html');
+}
+
+// 行数据缓存 + data-id 事件委托：名称只出现在元素文本里，绝不拼进 JS 代码或属性
+var userRows = [];
+var goodsRows = [];
+var loadSeq = {};          // 每个面板的请求序号，用于丢弃过期响应
+var savingUser = false;    // 用户弹窗提交锁
+var savingGoods = false;   // 商品弹窗提交锁
+var actionBusy = false;    // 删除等写操作的共享锁
+var jumpLast = {};                // 一次性标志：新增后跳到最后一页，让新行可见
+// 四个管理端列表全部服务端分页；每页默认 10 条
+var SIZES = [10, 20, 50, 100];
+var DEFAULT_SIZE = 10;
+var pageState = {
+    users:  { page: 1, size: DEFAULT_SIZE, pages: 0, total: 0 },
+    goods:  { page: 1, size: DEFAULT_SIZE, pages: 0, total: 0 },
+    orders: { page: 1, size: DEFAULT_SIZE, pages: 0, total: 0 },
+    logs:   { page: 1, size: DEFAULT_SIZE, pages: 0, total: 0 }
+};
+
+/** 页码必须是正整数：?page=1.5 这种深链会被后端拒绝（HTTP 400），面板就永久停在错误态 */
+function normPage(v) {
+    var n = attrId(v);
+    return (n !== null && Number.isInteger(n)) ? n : 1;
+}
+
+/** 每页条数只认合法档位：深链里手写的 ?size=999999 不能被固化进状态和 URL */
+function normSize(v) {
+    var n = attrId(v);
+    return (n !== null && SIZES.indexOf(n) >= 0) ? n : DEFAULT_SIZE;
+}
 
 // ==================== Helpers ====================
 function toggleClear(inputId, clearId) {
@@ -153,15 +242,206 @@ function toggleClear(inputId, clearId) {
 function clearSearch(inputId, clearId, loadFn) {
     document.getElementById(inputId).value = '';
     document.getElementById(clearId).classList.remove('visible');
+    var KEY_OF = { userSearch: 'users', goodsSearch: 'goods', orderSearch: 'orders', logSearch: 'logs' };
+    var key = KEY_OF[inputId] || null;
+    if (key) pageState[key].page = 1;      // 换关键词要从第一页开始
     loadFn();
 }
+/** 表格内的提示行 */
+function rowMsg(colspan, text, isError) {
+    return '<tr><td colspan="' + colspan + '" class="empty' + (isError ? ' table-error' : '') + '">' + esc(text) + '</td></tr>';
+}
+/** 非表格容器（概览）的提示块：<tr> 放进 div 会被浏览器丢掉，导致错误样式失效 */
+function boxMsg(text, isError) {
+    return '<div class="empty' + (isError ? ' table-error' : '') + '">' + esc(text) + '</div>';
+}
+function bindRowActions(tbodyId, handler) {
+    document.getElementById(tbodyId).addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a[data-act]') : null;
+        if (!a) return;
+        e.preventDefault();
+        handler(a.getAttribute('data-act'), attrId(a.getAttribute('data-id')));
+    });
+}
+function findRow(rows, id) {
+    for (var i = 0; i < rows.length; i++) { if (rows[i].id === id) return rows[i]; }
+    return null;
+}
+/** ID 只接受正数；损坏的行不渲染操作链接，也不允许拼进 URL */
+function requireId(id) {
+    var n = attrId(id);
+    if (n === null) { toast('无效的数据 ID，请刷新列表后重试', 'error'); return null; }
+    return n;
+}
+function setBusy(btnId, on) {
+    var b = document.getElementById(btnId);
+    if (b) b.disabled = on;
+}
+/** 破坏性操作串行化：连点两次删除不会再弹第二个 confirm，也不会出现误报 */
+async function withAction(fn) {
+    if (actionBusy) return;
+    actionBusy = true;
+    try { await fn(); } finally { actionBusy = false; }
+}
+/** 搜索/筛选后回到第一页，避免停在越界页上看到空表 */
+function gotoPageAndReload(key, loadFn) {
+    pageState[key].page = 1;
+    loadFn();
+}
+function sizeOptionsList(cur) {
+    return SIZES.map(function (n) {
+        return '<option value="' + n + '"' + (n === Number(cur) ? ' selected' : '') + '>' + n + ' 条/页</option>';
+    }).join('');
+}
 
-// ==================== Panel Switching ====================
-function switchPanel(name) {
-    document.querySelectorAll('.panel').forEach(function(p) { p.style.display = 'none'; });
-    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-    document.getElementById('panel-' + name).style.display = 'block';
-    document.querySelector('[data-panel="' + name + '"]').classList.add('active');
+function sizeOptions(cur) {
+    return sizeOptionsList(cur);
+}
+
+/** 每个列表的分页条容器 id：usersPager / goodsPager / ordersPager / logsPager */
+function pagerBox(key) {
+    return document.getElementById(key + 'Pager');
+}
+function pagerHtml(key) {
+    var st = pageState[key];
+    if (!st.total) return '';
+    var prev = st.page > 1
+        ? '<a href="javascript:void(0)" class="page-btn" data-page="' + (st.page - 1) + '">上一页</a>'
+        : '<span class="page-btn disabled">上一页</span>';
+    var next = st.page < st.pages
+        ? '<a href="javascript:void(0)" class="page-btn" data-page="' + (st.page + 1) + '">下一页</a>'
+        : '<span class="page-btn disabled">下一页</span>';
+    return prev + '<span class="page-info">共 ' + st.total + ' 条 · 第 ' + st.page + '/' + (st.pages || 1) + ' 页</span>' + next +
+        '<select class="filter-select page-size">' + sizeOptions(st.size) + '</select>';
+}
+function renderPager(key) {
+    var box = pagerBox(key);
+    if (box) box.innerHTML = pagerHtml(key);
+}
+function bindPager(key, loadFn) {
+    var box = pagerBox(key);
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a.page-btn[data-page]') : null;
+        if (!a) return;
+        e.preventDefault();
+        var n = attrId(a.getAttribute('data-page'));
+        if (n === null) return;
+        pageState[key].page = n;
+        loadFn();
+    });
+    box.addEventListener('change', function (e) {
+        if (!e.target.classList || !e.target.classList.contains('page-size')) return;
+        pageState[key].page = 1;
+        pageState[key].size = normSize(e.target.value);
+        loadFn();
+    });
+}
+/** 后端统一返回 {records,total,page,size,pages}；越界时回退一页，避免停在空页 */
+function applyPage(key, pg, records) {
+    var st = pageState[key];
+    st.total = pg.total || 0;
+    st.pages = pg.pages || 0;
+    st.page = pg.page || st.page;
+    if (!records.length && st.total > 0 && st.page > 1) {
+        st.page = Math.max(1, Math.min(st.page - 1, st.pages || 1));
+        return true;   // 需要重新加载
+    }
+    return false;
+}
+function fmtBytes(b) {
+    if (b == null || b < 0) return '-';
+    if (b === 0) return '0 B';
+    var k = 1024, s = ['B', 'KB', 'MB', 'GB'], i = Math.min(Math.floor(Math.log(b) / Math.log(k)), s.length - 1);
+    return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+}
+function fmtUp(ms) {
+    if (ms == null || isNaN(Number(ms))) return '-';
+    var t = Math.floor(Number(ms) / 1000), d = Math.floor(t / 86400); t %= 86400;
+    var h = Math.floor(t / 3600); t %= 3600;
+    var m = Math.floor(t / 60);
+    return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
+}
+
+// ==================== Hash Router ====================
+// 面板 + 筛选条件 + 页码全部写进 URL（#/users?keyword=..&page=2&size=20）
+// 浏览器刷新、收藏、前进/后退都能回到当前视图；旧行为是刷新后一定掉回“系统概览”。
+var ROUTES = ['dashboard', 'users', 'goods', 'orders', 'logs'];
+var currentPanel = 'dashboard';
+
+function parseHash() {
+    return HashRoute.parse(ROUTES, 'dashboard');
+}
+
+function textInput(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+}
+
+/** 当前面板的可视状态 -> URL query */
+function routeState(name) {
+    if (name === 'users') {
+        return { keyword: textInput('userSearch'), page: pageState.users.page, size: pageState.users.size };
+    }
+    if (name === 'orders') {
+        return { keyword: textInput('orderSearch'), status: document.getElementById('orderStatus').value, page: pageState.orders.page, size: pageState.orders.size };
+    }
+    if (name === 'goods') {
+        return { keyword: textInput('goodsSearch'), page: pageState.goods.page, size: pageState.goods.size };
+    }
+    if (name === 'logs') {
+        return { keyword: textInput('logSearch'), action: document.getElementById('logAction').value,
+            page: pageState.logs.page, size: pageState.logs.size };
+    }
+    return {};
+}
+
+/** 默认值不写进 URL，保持地址干净 */
+var ROUTE_DEFAULTS = {
+    users: { page: 1, size: DEFAULT_SIZE },
+    goods: { page: 1, size: DEFAULT_SIZE },
+    orders: { page: 1, size: DEFAULT_SIZE },
+    logs: { page: 1, size: DEFAULT_SIZE }
+};
+
+function buildHash(name, state) {
+    return HashRoute.build(name, state, ROUTE_DEFAULTS[name] || {});
+}
+
+/** 用 replaceState 写 hash：不产生历史记录，后退键仍然是“上一个面板” */
+function syncHash() {
+    HashRoute.write(currentPanel, routeState(currentPanel), ROUTE_DEFAULTS[currentPanel] || {});
+}
+
+/** URL query -> 控件与分页状态 */
+function restoreState(name, q) {
+    if (name === 'users') {
+        document.getElementById('userSearch').value = q.keyword || '';
+        toggleClear('userSearch', 'userClear');
+        pageState.users.page = normPage(q.page);
+        pageState.users.size = normSize(q.size);
+    } else if (name === 'orders') {
+        document.getElementById('orderSearch').value = q.keyword || '';
+        toggleClear('orderSearch', 'orderClear');
+        document.getElementById('orderStatus').value = (q.status === '0' || q.status === '1') ? q.status : '';
+        pageState.orders.page = normPage(q.page);
+        pageState.orders.size = normSize(q.size);
+    } else if (name === 'goods') {
+        document.getElementById('goodsSearch').value = q.keyword || '';
+        toggleClear('goodsSearch', 'goodsClear');
+        pageState.goods.page = normPage(q.page);
+        pageState.goods.size = normSize(q.size);
+    } else if (name === 'logs') {
+        document.getElementById('logSearch').value = q.keyword || '';
+        toggleClear('logSearch', 'logClear');
+        var actSel = document.getElementById('logAction');
+        actSel.value = (q.action && isActionName(q.action)) ? q.action : '';
+        pageState.logs.page = normPage(q.page);
+        pageState.logs.size = normSize(q.size);
+    }
+}
+
+function loadPanel(name) {
     if (name === 'dashboard') loadDashboard();
     else if (name === 'users') loadUsers();
     else if (name === 'goods') loadAdminGoods();
@@ -169,153 +449,783 @@ function switchPanel(name) {
     else if (name === 'logs') loadLogs();
 }
 
-// ==================== Dashboard ====================
-async function loadDashboard() {
-    var data = await apiGet('/admin/status');
-    var grid = document.getElementById('statusGrid');
-    if (data.code !== 200) { grid.innerHTML = '<div class="empty">加载失败</div>'; return; }
-    var s = data.data;
-    var uptime = fmtUp(s.uptime);
-    var heapUsed = fmtBytes(s.heapUsed);
-    var heapMax = fmtBytes(s.heapMax);
-    var cards = [
-        {l:'运行时间', v:uptime},
-        {l:'CPU核心数', v:s.availableProcessors},
-        {l:'活跃线程', v:s.threadCount + ' / 峰值 ' + s.peakThreadCount},
-        {l:'堆内存', v:heapUsed + ' / ' + heapMax},
-        {l:'非堆内存', v:fmtBytes(s.nonHeapUsed)},
-        {l:'可用处理器', v:s.availableProcessors + ' 核'}
-    ];
-    grid.innerHTML = cards.map(function(c) {
-        return '<div class="status-card"><div class="status-value">' + c.v + '</div><div class="status-label">' + c.l + '</div></div>';
-    }).join('');
+/** 只切换显示与高亮，不改 hash（避免与 hashchange 互相触发） */
+function showPanel(name) {
+    currentPanel = name;
+    document.querySelectorAll('.panel').forEach(function (p) { p.style.display = 'none'; });
+    document.querySelectorAll('.nav-item').forEach(function (n) {
+        n.classList.toggle('active', n.getAttribute('data-panel') === name);
+    });
+    document.getElementById('panel-' + name).style.display = 'block';
+    // 离开概览页时要停掉轮询，否则后台一直在打 /summary
+    if (typeof restartDashTimer === 'function') restartDashTimer();
 }
-function fmtBytes(b) { if (!b) return '0 B'; var k=1024, s=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i]; }
-function fmtUp(ms) { var s=Math.floor(ms/1000), d=Math.floor(s/86400); s%=86400; var h=Math.floor(s/3600); s%=3600; var m=Math.floor(s/60); return (d?d+'d ':'')+h+'h '+m+'m'; }
+
+function applyRoute() {
+    if (!adminReady) return;
+    var r = parseHash();
+    showPanel(r.name);
+    restoreState(r.name, r.query);
+    loadPanel(r.name);
+}
+
+/** 保留旧入口：改 hash 即可，路由由 hashchange 驱动 */
+function switchPanel(name) {
+    if (!adminReady) return;
+    if (window.location.hash === '#/' + name) applyRoute();
+    else window.location.hash = '#/' + name;
+}
+
+HashRoute.watch(applyRoute);
+
+// ==================== Dashboard ====================
+// 系统概览：业务数据 + 速率 + 库存 + JVM + 最近操作。
+// 以前只有 6 张 JVM 静态卡片，压测时看不出吞吐/支付率/GMV，也看不到数字在动。
+// 数据一次拿齐（/admin/summary），避开打 4 个列表接口只为取 total。
+
+var DASH_KEY = { auto: 'dash.autoSec', win: 'dash.windowMinutes' };
+var DASH_AUTO_ALLOWED = [0, 5, 10, 30];        // 0 = 关闭轮询
+var DASH_WIN_ALLOWED = [1, 5, 15];
+var DASH_HEAP_SAMPLES = 60;                   // 堆使用率趋势最多留 60 个点（~5s 一个 ≈ 5 分钟）
+
+var dash = { seq: 0, timer: null, last: null, fail: null, at: null, rt: null, heap: [], db: null };
+var dbResetting = false;          // 重置只允许串行：两个人同时点会互相破坏
+
+/**
+ * 初始化状态（启动策略 + 上次重置）：只是给概览页一句话说明“重启会不会清库”，
+ * 失败不影响主指标（不弹错，只在 meta 里不提）。
+ */
+async function loadDbState() {
+    var seq = (loadSeq.db = (loadSeq.db || 0) + 1);
+    var data = await apiGet('/admin/db/state');
+    if (seq !== loadSeq.db) return;
+    if (!data || data.code !== 200) return;
+    dash.db = data.data || null;
+    var btn = document.getElementById('dbResetBtn');
+    // 服务端关了手动重置（db.reset.enabled=false）就把按钮置灰，而不是点了再报错
+    if (btn && dash.db && dash.db.resetEnabled === false) {
+        btn.disabled = true;
+        btn.title = '服务器配置 db.reset.enabled=false，手动重置已关闭';
+    }
+    renderDashMeta();
+}
+
+/**
+ * 系统重置：一个按钮、一个固定口径（mode=full）。
+ * 不提供“只清数据”选项：表结构+索引+种子数据一次重建才是“回到刚部署的状态”，
+ * 也不会出现“改了 schema.sql 但索引没重建”这种半新半旧的库。
+ */
+async function resetDatabase(btn) {
+    if (dbResetting) return;
+    if (!adminReady) return;
+    var mode = 'full';
+    var typed = window.prompt(
+        '确定要系统重置吗？\n\n将重建 user / goods / orders / operation_log 四张表（含索引）并重新灌入初始数据，\n'
+        + '上一轮压测的订单与日志全部丢失，当前页面上的数据会作废。\n\n输入 RESET 确认（取消本框则什么都不做）：');
+    if (typed === null) return;
+    if (typed.trim() !== 'RESET') { toast('确认词不正确，未执行任何操作', 'warn'); return; }
+    var resetLabel = btn ? btn.textContent : '';
+
+    dbResetting = true;
+    if (btn) {
+        btn.disabled = true;
+        resetLabel = btn.textContent;             // 原文案记在变量里，不往 DOM 上挂私有状态
+        btn.textContent = '重置中...';
+    }
+    // 重置期间停掉轮询：否则概览会拿着半截数据反复刷
+    if (dash.timer) { clearInterval(dash.timer); dash.timer = null; }
+    try {
+        var data = await apiPost('/admin/db/reset?mode=' + mode + '&confirm=RESET', null);
+        if (!data || data.code !== 200) {
+            toast(errMsg(data, '重置失败'), 'error');
+            if (btn) btn.disabled = false;
+            dbResetting = false;
+            restartDashTimer();
+            return;
+        }
+        var r = data.data || {};
+        toast('系统重置完成：四张表已重建并灌入初始数据（' + r.elapsedMs + 'ms），即将返回登录页', 'success');
+        if (btn) btn.textContent = '已重置';
+        // 数据已经是另一套了：主动跳登录页重来一次，比让人对着旧列表猜哪个数是真的
+        setTimeout(function () { window.location.replace('/login.html'); }, 1200);
+        return;
+    } catch (e) {
+        toast('重置失败：' + (e && e.message ? e.message : e), 'error');
+        if (btn) btn.disabled = false;
+        dbResetting = false;
+        restartDashTimer();
+    }
+}
+
+function lsGet(k, dft) {
+    try {
+        var v = window.localStorage.getItem(k);
+        return (v === null || v === '') ? dft : v;
+    } catch (e) { return dft; }        // 隐私模式下 localStorage 会抛
+}
+
+function lsSet(k, v) {
+    try { window.localStorage.setItem(k, String(v)); } catch (e) { /* 存不上不影响功能 */ }
+}
+
+/** 下拉框只认白名单值：本地存储可能被别的页面/手改污染，不能拿到就用 */
+function dashVal(id, allowed, dft) {
+    var el = document.getElementById(id);
+    var n = attrId(el ? el.value : null);
+    return (n !== null && allowed.indexOf(n) >= 0) ? n : dft;
+}
+
+function dashAutoSec() { return dashVal('dashAuto', DASH_AUTO_ALLOWED, 5); }
+function dashWinMin() { return dashVal('dashWin', DASH_WIN_ALLOWED, 5); }
+
+/**
+ * 轮询只在“概览页可见 + 标签页在前台 + 开关不为关闭”时跑。
+ * 压测机的 CPU 不该花在一张没人看的页面上。
+ */
+function restartDashTimer() {
+    if (dash.timer) { clearInterval(dash.timer); dash.timer = null; }
+    var sec = dashAutoSec();
+    if (!sec) return;
+    if (typeof currentPanel !== 'undefined' && currentPanel !== 'dashboard') return;
+    if (document.hidden) return;
+    if (typeof setInterval !== 'function') return;
+    dash.timer = setInterval(function () { loadDashboard(true); }, sec * 1000);
+}
+
+function initDashControls() {
+    var auto = document.getElementById('dashAuto');
+    var win = document.getElementById('dashWin');
+    var btn = document.getElementById('dashRefresh');
+    if (!auto || !win) return;
+    var a = lsGet(DASH_KEY.auto, '5'), w = lsGet(DASH_KEY.win, '5');
+    auto.value = String(dashVal0(a, DASH_AUTO_ALLOWED, 5));
+    win.value = String(dashVal0(w, DASH_WIN_ALLOWED, 5));
+    auto.addEventListener('change', function () {
+        lsSet(DASH_KEY.auto, dashAutoSec());
+        restartDashTimer();
+        renderDashMeta();
+    });
+    win.addEventListener('change', function () {
+        lsSet(DASH_KEY.win, dashWinMin());
+        loadDashboard(true);        // 换窗口立即重拉，不等下一个 tick
+    });
+    if (btn) btn.addEventListener('click', function () { loadDashboard(true); });   // “刷新”只管重新拉数据
+    var resetBtn = document.getElementById('dbResetBtn');
+    if (resetBtn) resetBtn.addEventListener('click', function () { resetDatabase(this); });
+    // 回到前台时补一次（隐藏期间的数据不要靠旧值冒充最新）
+    if (document.addEventListener) {
+        document.addEventListener('visibilitychange', function () {
+            restartDashTimer();
+            if (!document.hidden && currentPanel === 'dashboard') loadDashboard(true);
+        });
+    }
+}
+
+function dashVal0(raw, allowed, dft) {
+    var n = attrId(raw);
+    return (n !== null && allowed.indexOf(n) >= 0) ? n : dft;
+}
+
+async function loadDashboard(silent) {
+    if (!adminReady) return;
+    var seq = (loadSeq.dashboard = (loadSeq.dashboard || 0) + 1);
+    dash.seq = seq;
+    if (!silent && !dash.last) {
+        var sg = document.getElementById('statusGrid');
+        var bg = document.getElementById('bizGrid');
+        var rb = document.getElementById('recentBox');
+        if (sg) sg.innerHTML = '加载中...';
+        if (bg) bg.innerHTML = '<div class="dash-loading">加载中...</div>';
+        if (rb) rb.innerHTML = '加载中...';
+    }
+    var win = dashWinMin();
+    var t0 = Date.now();
+    var data = await apiGet('/admin/summary?windowMinutes=' + win);
+    if (seq !== loadSeq.dashboard) return;                // 已有更新的请求在跑，丢弃本次结果
+    dash.rt = Date.now() - t0;
+    if (!data || data.code !== 200) {
+        // 刷新失败不刷掉旧数据：只把 meta 标红，不然压测中一抖概览就变“全错误”
+        dash.fail = errMsg(data, '概览数据加载失败');
+        renderDashboard();
+        syncHash();
+        return;
+    }
+    dash.last = data.data || {};
+    dash.fail = null;
+    dash.at = Date.now();
+    var jvm = dash.last.jvm || {};
+    var hp = jvm.heapPct != null ? Number(jvm.heapPct) : null;
+    if (hp !== null && isFinite(hp) && hp >= 0 && hp <= 1) {
+        dash.heap.push(hp);
+        while (dash.heap.length > DASH_HEAP_SAMPLES) dash.heap.shift();
+    }
+    renderDashboard();
+    loadRecentLogs();
+    loadDbState();
+    syncHash();
+}
+
+/** 千分位；任何非数字一律返回 '-'，避免页面上出现 NaN */
+function fmtCount(v) {
+    var n = Number(v);
+    if (v === null || v === undefined || v === '' || !isFinite(n)) return '-';
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtPct(v, digits) {
+    var n = Number(v);
+    if (v === null || v === undefined || !isFinite(n)) return '-';
+    return (n * 100).toFixed(digits == null ? 1 : digits) + '%';
+}
+
+/** tone: '' | 'warn' | 'bad' —— 阀值色让吞吐掉下去时一眼可见 */
+function metricCard(o) {
+    var cls = 'metric-card' + (o.tone ? ' is-' + o.tone : '');
+    var inner = '<div class="metric-value">' + esc(o.v) + '</div>'
+        + '<div class="metric-label">' + esc(o.l) + '</div>'
+        + (o.sub ? '<div class="metric-sub">' + esc(o.sub) + '</div>' : '');
+    // 卡片可点：直达对应面板（复用 hash 路由，不新开请求）
+    return o.href
+        ? '<a class="' + cls + ' is-link" href="' + attr(o.href) + '">' + inner + '</a>'
+        : '<div class="' + cls + '">' + inner + '</div>';
+}
+
+function renderDashboard() {
+    var s = dash.last;
+    renderDashMeta();
+    var biz = document.getElementById('bizGrid');
+    var grid = document.getElementById('statusGrid');
+    var heapCard = document.getElementById('heapCard');
+    var recent = document.getElementById('recentBox');
+    if (!biz || !grid || !heapCard || !recent) return;      //  markup 缺失时不要把整页抛断
+    if (!s) {
+        var msg = dash.fail || '暂无数据';
+        biz.innerHTML = boxMsg(msg, true);
+        grid.innerHTML = '';
+        heapCard.innerHTML = '';
+        recent.innerHTML = boxMsg(msg, true);
+        return;
+    }
+    var c = s.counts || {}, r = s.rate || {}, st = s.stock || {}, j = s.jvm || {};
+    var win = s.windowMinutes || dashWinMin();
+    var payRate = (r.payRate === null || r.payRate === undefined) ? null : Number(r.payRate);
+
+    biz.innerHTML = [
+        metricCard({ l: '订单总数', v: fmtCount(c.orders), sub: '未支付 ' + fmtCount(Number(c.orders || 0) - Number(c.paidOrders || 0)), href: '#/orders' }),
+        metricCard({
+            l: '已支付订单', v: fmtCount(c.paidOrders),
+            sub: '支付率 ' + (payRate === null ? '-' : fmtPct(payRate)) + '（近 ' + win + ' 分钟）',
+            tone: (payRate !== null && r.placed > 0 && payRate < 0.95) ? 'warn' : '',
+            href: '#/orders?status=1'
+        }),
+        metricCard({
+            l: '近 ' + win + ' 分钟下单', v: fmtCount(r.placed),
+            sub: (r.placedPerMin == null || !isFinite(Number(r.placedPerMin))) ? '-' : r.placedPerMin + ' 单/分钟'
+        }),
+        metricCard({ l: '用户数', v: fmtCount(c.users), sub: '含管理员', href: '#/users' }),
+        metricCard({
+            l: '商品 / 库存', v: fmtCount(c.goods) + ' / ' + fmtCount(st.total),
+            sub: '售罄商品 ' + fmtCount(st.soldOutGoods),
+            tone: Number(st.soldOutGoods) > 0 ? 'warn' : '',
+            href: '#/goods'
+        }),
+        metricCard({ l: '操作日志', v: fmtCount(c.logs), sub: '仅记成功的写操作', href: '#/logs' })
+    ].join('');
+
+    // 堆内存：进度条 + 阀值色（纯文字百分比看不出压力）
+    var pct = (j.heapPct === null || j.heapPct === undefined) ? null : Number(j.heapPct);
+    if (pct === null && j.heapMax > 0) pct = j.heapUsed / j.heapMax;
+    heapCard.innerHTML = heapBar(pct) + heapSpark(dash.heap);
+
+    var threadTone = (j.threadCount != null && j.threadCount > 400) ? 'warn' : '';
+    grid.innerHTML = [
+        { l: '运行时间', v: fmtUp(j.uptime) },
+        { l: '线程数（当前/峰值）', v: (j.threadCount == null ? '-' : j.threadCount) + ' / ' + (j.peakThreadCount == null ? '-' : j.peakThreadCount) },
+        { l: 'GC（次数 / 耗时）', v: fmtCount(j.gcCount) + ' / ' + fmtCount(j.gcTimeMs) + ' ms' },
+        { l: '堆内存（已用/上限）', v: fmtBytes(j.heapUsed) + ' / ' + fmtBytes(j.heapMax) },
+        { l: '非堆内存', v: fmtBytes(j.nonHeapUsed) },
+        { l: 'CPU 核心数', v: j.availableProcessors == null ? '-' : j.availableProcessors }
+    ].map(function (x) {
+        return '<div class="status-card"><div class="status-value">' + esc(x.v) + '</div><div class="status-label">' + esc(x.l) + '</div></div>';
+    }).join('') + (threadTone ? '' : '');
+}
+
+function heapBar(pct) {
+    if (pct === null || !isFinite(pct)) {
+        return '<div class="heap-line"><span class="heap-label">堆内存</span><span class="heap-value">-</span></div>';
+    }
+    var p = Math.max(0, Math.min(1, pct));
+    var tone = p >= 0.85 ? 'bad' : (p >= 0.7 ? 'warn' : 'ok');
+    return '<div class="heap-line">'
+        + '<span class="heap-label">堆内存使用率</span>'
+        + '<span class="heap-track"><span class="heap-fill is-' + tone + '" style="' + attr('width:' + (p * 100).toFixed(1) + '%') + '"></span></span>'
+        + '<span class="heap-value is-' + tone + '">' + esc(fmtPct(p) + '（' + fmtBytes(dash.last.jvm.heapUsed) + ' / ' + fmtBytes(dash.last.jvm.heapMax) + '）') + '</span>'
+        + '</div>';
+}
+
+/** 纯 SVG 折线（不引图表库，保持离线）：只看最近 60 次采样的堆使用率走向 */
+function heapSpark(series) {
+    if (!series || series.length < 2) return '';
+    var W = 600, H = 44, n = series.length;
+    var pts = series.map(function (v, i) {
+        var x = (i / (n - 1)) * W;
+        var y = H - Math.max(0, Math.min(1, Number(v))) * H;
+        return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    var last = series[series.length - 1];
+    var tone = last >= 0.85 ? 'bad' : (last >= 0.7 ? 'warn' : 'ok');
+    return '<svg class="heap-spark is-' + tone + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">'
+        + '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/>'
+        + '</svg><div class="heap-spark-hint">堆使用率趋势（最近 ' + n + ' 次采样，页面刷新即清零）</div>';
+}
+
+function renderDashMeta() {
+    var el = document.getElementById('dashMeta');
+    if (!el) return;
+    var bits = [];
+    bits.push('自动刷新 ' + (dashAutoSec() ? dashAutoSec() + 's' : '已关'));
+    bits.push('速率窗口 近 ' + dashWinMin() + ' 分钟');
+    bits.push(dash.at ? ('更新于 ' + fmtClock(dash.at) + (dash.rt != null ? ' · 本次 ' + dash.rt + 'ms' : '')) : '尚未加载');
+    // 把“重启会不会清库”说清：不写明这个，下一次有人发现数据丢了会很费解
+    if (dash.db) {
+        var modeZh = { ALWAYS: '每次启动重建', IF_ABSENT: '只在缺表时建', NEVER: '启动不动库' }[dash.db.startupMode] || dash.db.startupMode;
+        bits.push('启动初始化：' + modeZh);
+        if (dash.db.lastResetAt) bits.push('上次重置 ' + dash.db.lastResetAt + '（' + dash.db.lastResetMode + '，' + dash.db.lastResetMs + 'ms）');
+    }
+    var html = bits.map(function (b) { return '<span>' + esc(b) + '</span>'; }).join('<span class="dash-dot">·</span>');
+    if (dash.fail) html += '<span class="dash-fail">' + esc('刷新失败：' + dash.fail + '（显示上一次数据）') + '</span>';
+    el.innerHTML = html;
+}
+
+function fmtClock(ts) {
+    var d = new Date(ts);
+    function p(x) { return x < 10 ? '0' + x : String(x); }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
+/** 最近操作：直接复用日志分页接口取前 6 条，不另外开接口 */
+async function loadRecentLogs() {
+    var box = document.getElementById('recentBox');
+    if (!box) return;
+    var seq = (loadSeq.recent = (loadSeq.recent || 0) + 1);
+    var data = await apiGet('/admin/logs?page=1&size=6');
+    if (seq !== loadSeq.recent) return;
+    if (!data || data.code !== 200) {
+        box.innerHTML = boxMsg(errMsg(data, '最近操作加载失败'), true);
+        return;
+    }
+    var rows = (data.data && data.data.records) || [];
+    if (!rows.length) {
+        box.innerHTML = '<div class="dash-loading">暂无操作记录</div>';
+        return;
+    }
+    box.innerHTML = '<table class="recent-table"><tbody>' + rows.map(function (l) {
+        return '<tr><td class="cell-time">' + esc(fmtTime(l.createTime)) + '</td>'
+            + '<td>' + actionCell(l.action) + '</td>'
+            + '<td>' + esc(l.username || '-') + '</td>'
+            + '<td class="recent-detail">' + esc(l.detail || '') + '</td>'
+            + '<td class="cell-ip">' + esc(l.ip || '-') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
 
 // ==================== Users ====================
 async function loadUsers() {
+    if (!adminReady) return;
     var kw = document.getElementById('userSearch').value.trim();
-    var url = '/admin/users';
-    if (kw) url += '?keyword=' + encodeURIComponent(kw);
-    var data = await apiGet(url);
+    var st = pageState.users;
+    var url = '/admin/users?page=' + st.page + '&size=' + st.size;
+    if (kw) url += '&keyword=' + encodeURIComponent(kw);
     var tbody = document.getElementById('usersBody');
-    if (data.code !== 200) return;
-    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">无匹配用户</td></tr>'; return; }
-    tbody.innerHTML = data.data.map(function(u) {
-        var t = u.role === 1 ? '<span class="status-badge paid">管理员</span>' : '<span class="status-badge unpaid">用户</span>';
-        return '<tr><td>'+u.id+'</td><td>'+esc(u.username)+'</td><td>'+t+'</td><td>'+(u.createTime||'')+'</td>'+
-            '<td><a href="javascript:void(0)" onclick="editUser('+u.id+',\''+esc(u.username)+'\','+u.role+')">编辑</a> '+
-            '<a href="javascript:void(0)" class="danger-link" onclick="deleteUser('+u.id+')">删除</a></td></tr>';
+    var seq = (loadSeq.users = (loadSeq.users || 0) + 1);
+    tbody.innerHTML = rowMsg(5, '加载中...');
+    var data = await apiGet(url);
+    if (seq !== loadSeq.users) return;
+    if (data.code !== 200) {
+        userRows = [];
+        tbody.innerHTML = rowMsg(5, errMsg(data, '用户列表加载失败'), true);
+        renderPager('users');
+        return;
+    }
+    var pg = data.data || {};
+    userRows = (pg.records || []).filter(function (u) { return attrId(u.id) !== null; });
+    if (applyPage('users', pg, userRows)) return loadUsers();
+    if (jumpLast.users) {                        // 新增用户后：新记录在最后，翻到最后一页才看得见
+        jumpLast.users = false;
+        var lastU = Math.max(1, pg.pages || 1);
+        if (pageState.users.page !== lastU) { pageState.users.page = lastU; return loadUsers(); }
+    }
+    renderPager('users');
+    syncHash();
+    if (!userRows.length) { tbody.innerHTML = rowMsg(5, '无匹配用户'); return; }
+    var me = getUsername();
+    tbody.innerHTML = userRows.map(function (u) {
+        var badge = u.role === 1 ? '<span class="status-badge paid">管理员</span>' : '<span class="status-badge unpaid">用户</span>';
+        if (u.username === me) badge += ' <span class="tag-me">当前登录</span>';
+        return '<tr><td class="num">' + u.id + '</td><td>' + esc(u.username) + '</td><td>' + badge + '</td><td class="cell-time">' + esc(fmtTime(u.createTime)) + '</td>' +
+            '<td class="col-actions row-actions"><a href="javascript:void(0)" data-act="edit" data-id="' + u.id + '">编辑</a>' +
+            '<a href="javascript:void(0)" class="danger-link" data-act="del" data-id="' + u.id + '">删除</a></td></tr>';
     }).join('');
 }
 function showUserModal() {
-    document.getElementById('userModalTitle').textContent='新增用户'; document.getElementById('uId').value='';
-    document.getElementById('uUsername').value=''; document.getElementById('uPassword').value='';
-    document.getElementById('uPassword').placeholder='请输入密码'; document.getElementById('uRole').value='0';
-    document.getElementById('userModal').style.display='flex';
+    if (!adminReady) return;
+    document.getElementById('userModalTitle').textContent = '新增用户';
+    document.getElementById('uId').value = '';
+    var nameEl = document.getElementById('uUsername');
+    nameEl.value = ''; nameEl.readOnly = false;
+    var pwdEl = document.getElementById('uPassword');
+    pwdEl.value = ''; pwdEl.placeholder = '请输入密码';
+    document.getElementById('uRole').value = '0';
+    document.getElementById('userModal').style.display = 'flex';
+    nameEl.focus();
 }
-function editUser(id, name, role) {
-    document.getElementById('userModalTitle').textContent='编辑用户'; document.getElementById('uId').value=id;
-    document.getElementById('uUsername').value=name; document.getElementById('uPassword').value='';
-    document.getElementById('uPassword').placeholder='留空则不修改密码'; document.getElementById('uRole').value=role;
-    document.getElementById('userModal').style.display='flex';
+function editUser(id) {
+    if (!adminReady) return;
+    var u = findRow(userRows, id);
+    if (!u) { toast('用户数据已过期，请重新加载列表', 'error'); return; }
+    document.getElementById('userModalTitle').textContent = '编辑用户';
+    document.getElementById('uId').value = u.id;
+    var nameEl = document.getElementById('uUsername');
+    // 后端不允许改用户名，这里直接置为只读，避免“保存成功但名字没变”
+    nameEl.value = u.username; nameEl.readOnly = true;
+    var pwdEl = document.getElementById('uPassword');
+    pwdEl.value = ''; pwdEl.placeholder = '留空则不修改密码';
+    document.getElementById('uRole').value = u.role === 1 ? '1' : '0';
+    document.getElementById('userModal').style.display = 'flex';
 }
-function closeUserModal() { document.getElementById('userModal').style.display='none'; }
+function closeUserModal() { document.getElementById('userModal').style.display = 'none'; }
 async function saveUser() {
-    var id=document.getElementById('uId').value;
-    var body={username:document.getElementById('uUsername').value.trim(), password:document.getElementById('uPassword').value, role:parseInt(document.getElementById('uRole').value)};
-    if (!body.username) { toast('请输入用户名','error'); return; }
-    if (!id && !body.password) { toast('请输入密码','error'); return; }
-    var data = id ? await apiPut('/admin/users/'+id, body) : await apiPost('/admin/users', body);
-    if (data.code===200) { toast(id?'更新成功':'创建成功','success'); closeUserModal(); loadUsers(); }
-    else { toast(data.msg||'操作失败','error'); }
+    if (!adminReady || savingUser) return;
+    var idVal = document.getElementById('uId').value;
+    var isEdit = idVal !== '';                 // 用“是否为空串”判断编辑态，不用真值
+    var username = document.getElementById('uUsername').value.trim();
+    var password = document.getElementById('uPassword').value;
+    var role = parseInt(document.getElementById('uRole').value, 10);
+    var id = isEdit ? requireId(idVal) : null;
+    if (isEdit && id === null) return;
+    if (!isEdit && !username) { toast('请输入用户名', 'error'); return; }
+    if (!isEdit && !password) { toast('请输入密码', 'error'); return; }
+    if (password && password.length > 100) { toast('密码长度不能超过 100', 'error'); return; }
+
+    var body = { role: role };
+    if (!isEdit) body.username = username;
+    if (password) body.password = password;
+
+    savingUser = true;
+    setBusy('userSaveBtn', true);
+    try {
+        var data = isEdit ? await apiPut('/admin/users/' + encodeURIComponent(id), body)
+                          : await apiPost('/admin/users', body);
+        if (data.code === 200) {
+            toast(isEdit ? '更新成功' : '创建成功', 'success');
+            closeUserModal();
+            if (!isEdit) jumpLast.users = true;   // 新建的用户 id 最大，不在当前页会误以为没创建成功
+            loadUsers();
+        }
+        else { toast(errMsg(data, isEdit ? '更新失败' : '创建失败'), 'error'); }
+    } finally {
+        savingUser = false;
+        setBusy('userSaveBtn', false);
+    }
 }
 async function deleteUser(id) {
-    if (!confirm('确认删除该用户？')) return;
-    var data = await apiDelete('/admin/users/'+id);
-    if (data.code===200) { toast('删除成功','success'); loadUsers(); }
-    else { toast(data.msg||'删除失败','error'); }
+    if (!adminReady) return;
+    id = requireId(id);
+    if (id === null) return;
+    var u = findRow(userRows, id);
+    if (!confirm('确认删除用户「' + (u ? u.username : id) + '」？')) return;
+    await withAction(async function () {
+        var data = await apiDelete('/admin/users/' + encodeURIComponent(id));
+        if (data.code === 200) { toast('删除成功', 'success'); loadUsers(); return; }
+        // 被“已有订单”规则挡住时，提供可执行的下一步而不是一个英文错误
+        var handled = await cleanupOrdersThen(data.msg, '/admin/orders?userId=' + encodeURIComponent(id), function () {
+            return apiDelete('/admin/users/' + encodeURIComponent(id)).then(function (d2) {
+                if (d2.code === 200) { toast('删除成功', 'success'); loadUsers(); }
+                else { toast(errMsg(d2, '删除失败'), 'error'); }
+            });
+        });
+        if (!handled) toast(errMsg(data, '删除失败'), 'error');
+    });
 }
 
 // ==================== Goods ====================
 async function loadAdminGoods() {
+    if (!adminReady) return;
     var kw = document.getElementById('goodsSearch').value.trim();
-    var url = '/goods/list';
-    if (kw) url += '?keyword=' + encodeURIComponent(kw);
-    var data = await apiGet(url);
+    var st = pageState.goods;
+    var url = '/admin/goods?page=' + st.page + '&size=' + st.size;
+    if (kw) url += '&keyword=' + encodeURIComponent(kw);
     var tbody = document.getElementById('goodsBody');
-    if (data.code !== 200) return;
-    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">无匹配商品</td></tr>'; return; }
-    tbody.innerHTML = data.data.map(function(g) {
-        return '<tr><td>'+g.id+'</td><td>'+esc(g.goodsName)+'</td><td>¥'+g.price+'</td><td>'+g.stock+'</td><td>'+(g.createTime||'')+'</td>'+
-            '<td><a href="javascript:void(0)" onclick="editGoods('+g.id+',\''+esc(g.goodsName)+'\','+g.price+','+g.stock+')">编辑</a> '+
-            '<a href="javascript:void(0)" class="danger-link" onclick="deleteGoods('+g.id+')">删除</a></td></tr>';
+    var seq = (loadSeq.goods = (loadSeq.goods || 0) + 1);
+    tbody.innerHTML = rowMsg(6, '加载中...');
+    var data = await apiGet(url);
+    if (seq !== loadSeq.goods) return;
+    if (data.code !== 200) {
+        goodsRows = [];
+        renderPager('goods');
+        syncHash();
+        tbody.innerHTML = rowMsg(6, errMsg(data, '商品列表加载失败'), true);
+        return;
+    }
+    var pg = data.data || {};
+    var lastG = Math.max(1, Math.ceil((pg.total || 0) / pageState.goods.size));
+    if (jumpLast.goods) {                        // 新增商品后：新记录在最后一页，不然看起来像没加成功
+        jumpLast.goods = false;
+        if (pageState.goods.page !== lastG) { pageState.goods.page = lastG; return loadAdminGoods(); }
+    }
+    goodsRows = (pg.records || []).filter(function (g) { return attrId(g.id) !== null; });
+    if (applyPage('goods', pg, goodsRows)) { return loadAdminGoods(); }   // 停在空页时自动回退
+    renderPager('goods');
+    syncHash();
+    if (!goodsRows.length) { tbody.innerHTML = rowMsg(6, '无匹配商品'); return; }
+    tbody.innerHTML = goodsRows.map(function (g) {
+        return '<tr><td class="num">' + g.id + '</td><td>' + esc(g.goodsName) + '</td><td class="num">' + esc(fmtMoney(g.price)) + '</td>' +
+            '<td class="num">' + (g.stock == null ? '-' : g.stock) + '</td><td class="cell-time">' + esc(fmtTime(g.createTime)) + '</td>' +
+            '<td class="col-actions row-actions"><a href="javascript:void(0)" data-act="edit" data-id="' + g.id + '">编辑</a>' +
+            '<a href="javascript:void(0)" class="danger-link" data-act="del" data-id="' + g.id + '">删除</a></td></tr>';
     }).join('');
 }
 function showGoodsModal() {
-    document.getElementById('goodsModalTitle').textContent='新增商品'; document.getElementById('gId').value='';
-    document.getElementById('gName').value=''; document.getElementById('gPrice').value=''; document.getElementById('gStock').value='';
-    document.getElementById('goodsModal').style.display='flex';
+    if (!adminReady) return;
+    document.getElementById('goodsModalTitle').textContent = '新增商品';
+    document.getElementById('gId').value = '';
+    document.getElementById('gName').value = '';
+    document.getElementById('gPrice').value = '';
+    document.getElementById('gStock').value = '';
+    document.getElementById('goodsModal').style.display = 'flex';
+    document.getElementById('gName').focus();
 }
-function editGoods(id, name, price, stock) {
-    document.getElementById('goodsModalTitle').textContent='编辑商品'; document.getElementById('gId').value=id;
-    document.getElementById('gName').value=name; document.getElementById('gPrice').value=price; document.getElementById('gStock').value=stock;
-    document.getElementById('goodsModal').style.display='flex';
+function editGoods(id) {
+    if (!adminReady) return;
+    var g = findRow(goodsRows, id);
+    if (!g) { toast('商品数据已过期，请重新加载列表', 'error'); return; }
+    document.getElementById('goodsModalTitle').textContent = '编辑商品';
+    document.getElementById('gId').value = g.id;
+    document.getElementById('gName').value = g.goodsName;
+    document.getElementById('gPrice').value = g.price;
+    document.getElementById('gStock').value = g.stock;
+    document.getElementById('goodsModal').style.display = 'flex';
 }
-function closeGoodsModal() { document.getElementById('goodsModal').style.display='none'; }
+function closeGoodsModal() { document.getElementById('goodsModal').style.display = 'none'; }
 async function saveGoods() {
-    var id=document.getElementById('gId').value;
-    var body={goodsName:document.getElementById('gName').value.trim(), price:parseFloat(document.getElementById('gPrice').value), stock:parseInt(document.getElementById('gStock').value)};
-    if (!body.goodsName || isNaN(body.price) || isNaN(body.stock)) { toast('请完整填写','error'); return; }
-    var data = id ? await apiPut('/admin/goods/'+id, body) : await apiPost('/admin/goods', body);
-    if (data.code===200) { toast(id?'更新成功':'创建成功','success'); closeGoodsModal(); loadAdminGoods(); }
-    else { toast(data.msg||'操作失败','error'); }
+    if (!adminReady || savingGoods) return;
+    var idVal = document.getElementById('gId').value;
+    var isEdit = idVal !== '';
+    var id = isEdit ? requireId(idVal) : null;
+    if (isEdit && id === null) return;
+    var body = {
+        goodsName: document.getElementById('gName').value.trim(),
+        price: parseFloat(document.getElementById('gPrice').value),
+        stock: parseInt(document.getElementById('gStock').value, 10)
+    };
+    if (!body.goodsName) { toast('请输入商品名称', 'error'); return; }
+    if (isNaN(body.price) || body.price < 0) { toast('请输入正确的单价（≥ 0）', 'error'); return; }
+    if (isNaN(body.stock) || body.stock < 0) { toast('请输入正确的库存（≥ 0）', 'error'); return; }
+
+    savingGoods = true;
+    setBusy('goodsSaveBtn', true);
+    try {
+        var data = isEdit ? await apiPut('/admin/goods/' + encodeURIComponent(id), body)
+                          : await apiPost('/admin/goods', body);
+        if (data.code === 200) {
+            toast(isEdit ? '更新成功' : '创建成功', 'success');
+            if (!isEdit) jumpLast.goods = true;   // 新商品 id 最大，不跳最后一页会以为没加成功
+            closeGoodsModal(); loadAdminGoods();
+        }
+        else { toast(errMsg(data, isEdit ? '更新失败' : '创建失败'), 'error'); }
+    } finally {
+        savingGoods = false;
+        setBusy('goodsSaveBtn', false);
+    }
 }
 async function deleteGoods(id) {
-    if (!confirm('确认删除该商品？')) return;
-    var data = await apiDelete('/admin/goods/'+id);
-    if (data.code===200) { toast('删除成功','success'); loadAdminGoods(); }
-    else { toast(data.msg||'删除失败','error'); }
+    if (!adminReady) return;
+    id = requireId(id);
+    if (id === null) return;
+    var g = findRow(goodsRows, id);
+    if (!confirm('确认删除商品「' + (g ? g.goodsName : id) + '」？')) return;
+    await withAction(async function () {
+        var data = await apiDelete('/admin/goods/' + encodeURIComponent(id));
+        if (data.code === 200) { toast('删除成功', 'success'); loadAdminGoods(); return; }
+        var handled = await cleanupOrdersThen(data.msg, '/admin/orders?goodsId=' + encodeURIComponent(id), function () {
+            return apiDelete('/admin/goods/' + encodeURIComponent(id)).then(function (d2) {
+                if (d2.code === 200) { toast('删除成功', 'success'); loadAdminGoods(); }
+                else { toast(errMsg(d2, '删除失败'), 'error'); }
+            });
+        });
+        if (!handled) toast(errMsg(data, '删除失败'), 'error');
+    });
+}
+
+/**
+ * 删除被订单拦住时的出路：先征得同意清掉该用户/商品的全部订单，再重试删除。
+ * @param {*} stillHasOrdersMsg 后端返回的 msg
+ * @param {*} cleanupPath       清理接口（带 query）
+ * @param {*} retry             重新执行删除的函数
+ */
+async function cleanupOrdersThen(msg, cleanupPath, retry) {
+    if (!msg || msg.indexOf('still has orders') < 0) return false;
+    if (!confirm('该记录还有关联订单，不能直接删除。\n是否先删除它的全部订单，然后重试删除？')) return true;
+    var clean = await apiDelete(cleanupPath);
+    if (clean.code !== 200) { toast(errMsg(clean, '清理订单失败'), 'error'); return true; }
+    toast('已清理 ' + (typeof clean.data === 'number' ? clean.data : 0) + ' 条订单，重试删除…', 'success');
+    await retry();
+    return true;
 }
 
 // ==================== Orders ====================
 async function loadAdminOrders() {
+    if (!adminReady) return;
     var kw = document.getElementById('orderSearch').value.trim();
-    var url = '/admin/orders';
-    if (kw) url += '?keyword=' + encodeURIComponent(kw);
-    var data = await apiGet(url);
+    var st = pageState.orders;
+    var status = document.getElementById('orderStatus').value;
+    var url = '/admin/orders?page=' + st.page + '&size=' + st.size;
+    if (kw) url += '&keyword=' + encodeURIComponent(kw);
+    if (status !== '') url += '&status=' + encodeURIComponent(status);
     var tbody = document.getElementById('adminOrdersBody');
-    if (data.code !== 200) return;
-    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">无匹配订单</td></tr>'; return; }
-    tbody.innerHTML = data.data.map(function(o) {
-        var s = o.status===1?'<span class="status-badge paid">已支付</span>':'<span class="status-badge unpaid">未支付</span>';
-        var act = o.status===0?'<a href="javascript:void(0)" onclick="payOrder('+o.id+')">标记支付</a>':'-';
-        return '<tr><td><code>'+o.orderNo+'</code></td><td>'+o.userId+'</td><td>'+o.goodsId+'</td><td>¥'+o.payPrice+'</td><td>'+new Date(o.createTs).toLocaleString('zh-CN')+'</td><td>'+s+'</td><td>'+act+'</td></tr>';
+    var seq = (loadSeq.orders = (loadSeq.orders || 0) + 1);
+    tbody.innerHTML = rowMsg(7, '加载中...');
+    var data = await apiGet(url);
+    if (seq !== loadSeq.orders) return;
+    if (data.code !== 200) {
+        tbody.innerHTML = rowMsg(7, errMsg(data, '订单列表加载失败'), true);
+        renderPager('orders');
+        return;
+    }
+    var pg = data.data || {};
+    var rows = pg.records || [];
+    if (applyPage('orders', pg, rows)) return loadAdminOrders();
+    renderPager('orders');
+    syncHash();
+    if (!rows.length) { tbody.innerHTML = rowMsg(7, '无匹配订单'); return; }
+    tbody.innerHTML = rows.map(function (o) {
+        var s = o.status === 1 ? '<span class="status-badge paid">已支付</span>' : '<span class="status-badge unpaid">未支付</span>';
+        var oid = attrId(o.id);
+        // 支付是用户端行为，管理端只保留清理/删除能力
+        var acts = oid === null ? '-' : '<a href="javascript:void(0)" class="danger-link" data-act="del" data-id="' + oid + '">删除</a>';
+        return '<tr><td><code class="cell-code">' + esc(o.orderNo) + '</code></td><td class="num">' + esc(o.userId) + '</td><td class="num">' + esc(o.goodsId) + '</td>' +
+            '<td class="num">' + esc(fmtMoney(o.payPrice)) + '</td><td class="cell-time">' + esc(fmtTime(o.createTs)) + '</td><td>' + s + '</td><td class="col-actions row-actions">' + acts + '</td></tr>';
     }).join('');
 }
-async function payOrder(id) {
-    var data = await apiPut('/admin/orders/'+id+'/pay', {});
-    if (data.code===200) { toast('已标记支付','success'); loadAdminOrders(); }
-    else { toast(data.msg,'error'); }
+async function deleteOrder(id) {
+    if (!adminReady) return;
+    id = requireId(id);
+    if (id === null) return;
+    if (!confirm('确认删除订单 #' + id + '？删除后不可恢复。')) return;
+    await withAction(async function () {
+        var data = await apiDelete('/admin/orders/' + encodeURIComponent(id));
+        if (data.code === 200) { toast('订单已删除', 'success'); loadAdminOrders(); }
+        else { toast(errMsg(data, '删除失败'), 'error'); }
+    });
 }
 
 // ==================== Logs ====================
 async function loadLogs() {
+    if (!adminReady) return;
     var kw = document.getElementById('logSearch').value.trim();
-    var url = '/admin/logs';
-    if (kw) url += '?keyword=' + encodeURIComponent(kw);
-    var data = await apiGet(url);
+    var action = document.getElementById('logAction').value;
+    var st = pageState.logs;
+    var url = '/admin/logs?page=' + st.page + '&size=' + st.size;
+    if (action) url += '&action=' + encodeURIComponent(action);
+    if (kw) url += '&keyword=' + encodeURIComponent(kw);
     var tbody = document.getElementById('logsBody');
-    if (data.code !== 200) return;
-    if (!data.data || !data.data.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">无匹配日志</td></tr>'; return; }
-    tbody.innerHTML = data.data.map(function(l) {
-        return '<tr><td>'+l.id+'</td><td>'+esc(l.username)+'</td><td><code>'+l.action+'</code></td><td>'+esc(l.detail||'')+'</td><td>'+(l.createTime||'')+'</td></tr>';
+    var seq = (loadSeq.logs = (loadSeq.logs || 0) + 1);
+    tbody.innerHTML = rowMsg(7, '加载中...');
+    var data = await apiGet(url);
+    if (seq !== loadSeq.logs) return;
+    if (data.code !== 200) {
+        renderPager('logs');
+        syncHash();
+        tbody.innerHTML = rowMsg(7, errMsg(data, '操作日志加载失败'), true);
+        return;
+    }
+    var pg = data.data || {};
+    var rows = pg.records || [];
+    if (applyPage('logs', pg, rows)) { return loadLogs(); }
+    renderPager('logs');
+    syncHash();
+    if (!rows.length) { tbody.innerHTML = rowMsg(7, '无匹配日志'); return; }
+    tbody.innerHTML = rows.map(function (l) {
+        return '<tr><td class="num">' + esc(l.id == null ? '-' : l.id) + '</td><td>' + esc(l.username || '-') + '</td>' +
+            '<td>' + roleBadge(l.role) + '</td>' +
+            '<td class="cell-action">' + actionCell(l.action) + '</td>' +
+            '<td class="cell-detail">' + esc(l.detail || '') + '</td>' +
+            '<td class="cell-ip">' + esc(l.ip || '-') + '</td>' +
+            '<td class="cell-time">' + esc(fmtTime(l.createTime)) + '</td></tr>';
     }).join('');
+    loadLogActions(rows);
+}
+/** 用已知枚举打底，再合并日志里实际出现过的类型，避免后端无数据时下拉框是空的 */
+/** 合法操作类型才允许进 option 的 value（防属性注入） */
+function isActionName(a) {
+    return typeof a === 'string' && /^[A-Z][A-Z_]{1,49}$/.test(a);
 }
 
-function logout() { clearSession(); window.location.href = '/login.html'; }
-function esc(s) { var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+/** 用枚举重建下拉框；label 只显示中文，原枚举放 title 便于对脚本 */
+function buildActionOptions(sel, list, current) {
+    if (!sel) return;
+    var known = (list || []).filter(isActionName);
+    sel.innerHTML = '<option value="">全部操作类型</option>' + known.map(function (a) {
+        return '<option value="' + attr(a) + '"' + (a === current ? ' selected' : '') +
+            ' title="' + attr(a) + '">' + esc(actionText(a)) + '</option>';
+    }).join('');
+    if (current) sel.value = current;       // 值不在枚举里时保持“全部”，不会把非法值当成筛选条件
+}
+
+var logActionEnum = null;                  // 服务端枚举基本静态，缓存一次，别每次刷新面板都多打一发请求
+
+function loadLogActions(rows) {
+    var sel = document.getElementById('logAction');
+    var merged = ACTION_ORDER.slice();
+    (rows || []).forEach(function (l) { if (isActionName(l.action) && merged.indexOf(l.action) < 0) merged.push(l.action); });
+    if (logActionEnum) {
+        logActionEnum.forEach(function (a) { if (isActionName(a) && merged.indexOf(a) < 0) merged.push(a); });
+        // current 必须在重建 options 之前读、之后写回，否则两次并发 loadLogs 会让下拉与列表内容不一致
+        var current = sel.value;
+        buildActionOptions(sel, merged, current);
+        return;
+    }
+    var api = apiGet('/admin/log-actions');
+    Promise.resolve(api).then(function (d) {
+        var list = (d && d.code === 200 && Array.isArray(d.data)) ? d.data : [];
+        logActionEnum = list.filter(isActionName);
+        logActionEnum.forEach(function (a) { if (merged.indexOf(a) < 0) merged.push(a); });
+        buildActionOptions(sel, merged, sel.value);   // 重建前读当前值，避免竞态用陈旧值
+    });
+}
+/** 操作人角色：日志表独立一列，管理员/普通用户一眼能分 */
+function roleBadge(role) {
+    if (role === 1) return '<span class="status-badge paid">管理员</span>';
+    if (role === 0) return '<span class="status-badge unpaid">普通用户</span>';
+    return '<span class="muted">-</span>';
+}
+
+function actionText(a) {
+    // 映射表移到 /js/api.js（管理端与用户端共用一份口径），这里只保留旧调用名
+    return actionLabel(a);
+}
+
+function logout(btn) { logoutCurrent('/login.html', btn); }
+
+// ==================== Bootstrap ====================
+if (adminReady) {
+    document.getElementById('adminName').textContent = getUsername() || '';
+    bindRowActions('usersBody', function (act, id) { if (act === 'edit') editUser(id); else if (act === 'del') deleteUser(id); });
+    bindRowActions('goodsBody', function (act, id) { if (act === 'edit') editGoods(id); else if (act === 'del') deleteGoods(id); });
+    bindRowActions('adminOrdersBody', function (act, id) {
+        if (act === 'del') deleteOrder(id);
+    });
+    document.getElementById('logoutBtn').addEventListener('click', function () { logout(this); });
+    bindPager('users', loadUsers);
+    bindPager('goods', loadAdminGoods);
+    bindPager('orders', loadAdminOrders);
+    bindPager('logs', loadLogs);
+    document.getElementById('addUserBtn').addEventListener('click', function () { showUserModal(); });
+    document.getElementById('addGoodsBtn').addEventListener('click', function () { showGoodsModal(); });
+    buildActionOptions(document.getElementById('logAction'), ACTION_ORDER, document.getElementById('logAction').value);
+    initDashControls();
+    HashRoute.ensureHome('dashboard');   // 直接打开 /admin.html 时补默认路由
+    applyRoute();
+}
 </script>
 </body>
 </html>

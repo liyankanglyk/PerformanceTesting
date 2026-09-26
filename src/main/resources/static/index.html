@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>速购商城 - 性能测试系统</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body>
 
@@ -12,14 +12,15 @@
     <div class="logo">速购商城</div>
     <div class="user-info">
         <span id="usernameDisplay"></span>
-        <button class="btn btn-sm btn-danger" onclick="logout()">退出</button>
+        <button class="btn btn-sm btn-ghost" id="logoutBtn" type="button">退出</button>
     </div>
 </header>
 
 <div class="container">
+    <!-- 用真实链接做标签：可右键、可前进后退，刷新后停在当前标签（见 HashRoute） -->
     <div class="tabs">
-        <div class="tab active" onclick="switchTab('goods')">商品列表</div>
-        <div class="tab" onclick="switchTab('orders')">我的订单</div>
+        <a class="tab active" href="#/goods" data-tab="goods">商品列表</a>
+        <a class="tab" href="#/orders" data-tab="orders">我的订单</a>
     </div>
 
     <div class="search-bar">
@@ -34,9 +35,9 @@
     <!-- Orders Panel -->
     <div id="ordersPanel" style="display:none;">
         <div class="table-wrapper">
-            <table>
+            <table class="data-table">
                 <thead>
-                    <tr><th>订单编号</th><th>商品ID</th><th>金额</th><th>时间</th><th>状态</th></tr>
+                    <tr><th>订单编号</th><th>商品ID</th><th>金额</th><th>时间</th><th>状态</th><th class="col-actions">操作</th></tr>
                 </thead>
                 <tbody id="ordersBody"></tbody>
             </table>
@@ -45,43 +46,74 @@
     </div>
 </div>
 
-<script src="/js/api.js"></script>
+<script src="/js/api.js?v=7"></script>
 <script>
-if (!isLoggedIn()) { window.location.replace('/login.html'); }
-if (isAdmin()) { window.location.replace('/admin.html'); }
-
-var currentTab = 'goods';
-document.getElementById('usernameDisplay').textContent = getUsername();
-loadGoods();
-
-function logout() { clearSession(); window.location.href = '/login.html'; }
-
-function switchTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll('.tab').forEach(function(t, i) {
-        t.classList.toggle('active', (tab === 'goods' && i === 0) || (tab === 'orders' && i === 1));
-    });
-    var input = document.getElementById('searchInput');
-    if (tab === 'goods') {
-        input.placeholder = '搜索商品名称...';
-        document.getElementById('goodsPanel').style.display = 'grid';
-        document.getElementById('ordersPanel').style.display = 'none';
-    } else {
-        input.placeholder = '搜索订单编号...';
-        document.getElementById('goodsPanel').style.display = 'none';
-        document.getElementById('ordersPanel').style.display = 'block';
-    }
-    input.value = '';
-    doSearch();
+var shopReady = isLoggedIn() && !isAdmin();
+if (!shopReady) {
+    // 管理员不该停留在商城，普通未登录用户去登录页
+    window.location.replace(isLoggedIn() ? '/admin.html' : '/login.html');
 }
 
+var currentTab = 'goods';
+var ROUTES = ['goods', 'orders'];
+var DEFAULTS = { keyword: '' };
+var seq = { goods: 0, orders: 0 };
+
+document.getElementById('usernameDisplay').textContent = getUsername();
+document.getElementById('logoutBtn').addEventListener('click', function () { logoutCurrent('/login.html', this); });
+
+// ==================== 路由 ====================
+function parseRoute() {
+    return HashRoute.parse(ROUTES, 'goods');
+}
+
+/** 把当前标签的搜索词写进 URL（replaceState，不污染历史记录） */
+function syncHash() {
+    HashRoute.write(currentTab, { keyword: document.getElementById('searchInput').value.trim() }, DEFAULTS);
+}
+
+function showTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(function (t) {
+        t.classList.toggle('active', t.getAttribute('data-tab') === tab);
+    });
+    var input = document.getElementById('searchInput');
+    input.placeholder = tab === 'goods' ? '搜索商品名称...' : '搜索订单编号...';
+    document.getElementById('goodsPanel').style.display = tab === 'goods' ? 'grid' : 'none';
+    document.getElementById('ordersPanel').style.display = tab === 'orders' ? 'block' : 'none';
+}
+
+function loadTab(tab) {
+    if (tab === 'goods') loadGoods(); else loadOrders();
+}
+
+function applyRoute() {
+    if (!shopReady) return;
+    var r = parseRoute();
+    showTab(r.name);
+    document.getElementById('searchInput').value = r.query.keyword || '';
+    toggleClear();
+    loadTab(r.name);
+}
+
+/** 兼容入口（脚本/测试用）：真实标签点击走 <a href="#/..."> + hashchange */
+function switchTab(tab) {
+    if (window.location.hash === '#/' + tab) applyRoute();
+    else window.location.hash = '#/' + tab;
+}
+
+HashRoute.watch(applyRoute);
+
+// ==================== 搜索 ====================
 function doSearch() {
+    // 搜索一律回到第 1 页语义（用户端列表不分页，直接按关键词重查）
     if (currentTab === 'goods') loadGoods(); else loadOrders();
 }
 
 function toggleClear() {
     document.getElementById('searchClear').classList.toggle('visible', document.getElementById('searchInput').value.length > 0);
 }
+
 function clearSearch() {
     document.getElementById('searchInput').value = '';
     document.getElementById('searchClear').classList.remove('visible');
@@ -89,53 +121,143 @@ function clearSearch() {
     doSearch();
 }
 
+// ==================== 商品 ====================
 async function loadGoods() {
+    if (!shopReady) return;
     var keyword = document.getElementById('searchInput').value.trim();
     var url = '/goods/list';
     if (keyword) url += '?keyword=' + encodeURIComponent(keyword);
-    var data = await apiGet(url);
     var panel = document.getElementById('goodsPanel');
-    if (data.code !== 200 || !data.data || data.data.length === 0) {
-        panel.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无商品</div>';
+    var my = (seq.goods = seq.goods + 1);
+    panel.innerHTML = '<div class="empty" style="grid-column:1/-1;">加载中...</div>';
+    var data = await apiGet(url);
+    if (my !== seq.goods) return;                       // 丢弃过期响应，避免慢请求覆盖新结果
+    if (data.code !== 200) {
+        // 加载失败不能当成“暂无商品”，否则网络/登录问题会被误读成空数据
+        panel.innerHTML = '<div class="empty" style="grid-column:1/-1;">' + esc(errMsg(data, '商品加载失败')) + '</div>';
         return;
     }
-    panel.innerHTML = data.data.map(function(g) {
+    if (!data.data || data.data.length === 0) {
+        panel.innerHTML = '<div class="empty" style="grid-column:1/-1;">' + (keyword ? '无匹配商品' : '暂无商品') + '</div>';
+        return;
+    }
+    panel.innerHTML = data.data.map(function (g) {
         var stockClass = g.stock < 10 ? ' stock low' : ' stock';
+        var soldOut = Number(g.stock) <= 0;
         return '<div class="goods-card">' +
             '<div class="goods-name">' + esc(g.goodsName) + '</div>' +
             '<div class="goods-info">' +
-                '<span class="price">' + g.price + '</span>' +
-                '<span class="' + stockClass + '">库存: ' + g.stock + '</span>' +
+                '<span class="price">' + esc(fmtAmount(g.price)) + '</span>' +
+                '<span class="' + stockClass + '">库存: ' + esc(g.stock) + '</span>' +
             '</div>' +
-            '<button class="btn btn-primary" onclick="buy(' + g.id + ')">立即购买</button>' +
+            '<button class="btn btn-primary" type="button" data-buy="' + attrId(g.id) + '"' + (soldOut ? ' disabled' : '') + '>' + (soldOut ? '已售罄' : '立即购买') + '</button>' +
         '</div>';
     }).join('');
+    syncHash();
 }
 
+// 事件委托：商品名可能含引号，内联 onclick 会把属性拼断
+document.getElementById('goodsPanel').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-buy]') : null;
+    if (btn && !btn.disabled) buy(Number(btn.getAttribute('data-buy')));
+});
+
+var buying = false;
 async function buy(goodsId) {
-    var data = await apiPost('/order/buy', { goodsId: goodsId });
-    if (data.code === 200) { toast('下单成功', 'success'); loadGoods(); }
-    else { toast(data.msg || '下单失败', 'error'); }
+    goodsId = attrId(goodsId);
+    if (goodsId === null) { toast('无效的商品 ID', 'error'); return; }
+    if (buying) return;                                  // 防连点重复下单
+    buying = true;
+    try {
+        var data = await apiPost('/order/buy', { goodsId: goodsId });
+        if (data.code === 200) {
+            toast('下单成功，可在「我的订单」支付', 'success');
+            loadGoods();
+        } else {
+            toast(errMsg(data, '下单失败'), 'error');
+        }
+    } finally {
+        buying = false;
+    }
 }
 
+// ==================== 我的订单 ====================
 async function loadOrders() {
+    if (!shopReady) return;
     var keyword = document.getElementById('searchInput').value.trim();
     var url = '/order/list';
     if (keyword) url += '?keyword=' + encodeURIComponent(keyword);
-    var data = await apiGet(url);
     var tbody = document.getElementById('ordersBody');
     var empty = document.getElementById('ordersEmpty');
-    if (data.code !== 200 || !data.data || data.data.length === 0) {
-        tbody.innerHTML = ''; empty.style.display = 'block'; return;
+    var my = (seq.orders = seq.orders + 1);
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">加载中...</td></tr>';
+    var data = await apiGet(url);
+    if (my !== seq.orders) return;                      // 丢弃过期响应：慢请求不能覆盖新结果，也不能改写 URL
+    if (data.code !== 200) {
+        // 错误与“暂无订单”区分开
+        tbody.innerHTML = '';
+        empty.textContent = errMsg(data, '订单加载失败');
+        empty.style.display = 'block';
+        syncHash();
+        return;
+    }
+    var rows = data.data || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '';
+        empty.textContent = keyword ? '无匹配订单' : '暂无订单';
+        empty.style.display = 'block';
+        syncHash();
+        return;
     }
     empty.style.display = 'none';
-    tbody.innerHTML = data.data.map(function(o) {
-        var s = o.status === 1 ? '<span class="status-badge paid">已支付</span>' : '<span class="status-badge unpaid">未支付</span>';
-        return '<tr><td><code>' + o.orderNo + '</code></td><td>' + o.goodsId + '</td><td>¥' + o.payPrice + '</td><td>' + new Date(o.createTs).toLocaleString('zh-CN') + '</td><td>' + s + '</td></tr>';
+    tbody.innerHTML = rows.map(function (o) {
+        var paid = o.status === 1;
+        var s = paid ? '<span class="status-badge paid">已支付</span>' : '<span class="status-badge unpaid">未支付</span>';
+        var act = paid ? '<span class="muted">已完成支付</span>'
+            : '<button class="btn btn-sm btn-pay" type="button" data-pay="' + attr(o.orderNo) + '">确认支付 ¥' + esc(fmtAmount(o.payPrice)) + '</button>';
+        return '<tr><td><code>' + esc(o.orderNo) + '</code></td><td>' + esc(o.goodsId) + '</td>' +
+            '<td class="num">¥' + esc(fmtAmount(o.payPrice)) + '</td><td>' + esc(fmtTime(o.createTs)) + '</td>' +
+            '<td>' + s + '</td><td class="col-actions row-actions">' + act + '</td></tr>';
     }).join('');
+    syncHash();
 }
 
-function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+document.getElementById('ordersBody').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-pay]') : null;
+    if (btn && !btn.disabled) payOrder(btn.getAttribute('data-pay'), btn);
+});
+
+var paying = false;
+async function payOrder(orderNo, btn) {
+    if (paying) return;
+    if (!orderNo) { toast('无效的订单号', 'error'); return; }
+    paying = true;
+    var label = btn ? btn.textContent : '';          // 复位时连金额一起还回来，不要只写“确认支付”
+    if (btn) { btn.disabled = true; btn.textContent = '支付中...'; }
+    try {
+        var data = await apiPut('/order/pay/' + encodeURIComponent(orderNo));
+        if (data.code === 200) {
+            toast('支付成功', 'success');
+            loadOrders();
+        } else {
+            toast(errMsg(data, '支付失败'), 'error');
+            if (btn) { btn.disabled = false; btn.textContent = label; }
+            loadOrders();                            // 行状态可能已变（别人付过/单被删），重拉一次对齐
+        }
+    } catch (e) {
+        toast('支付失败，请重试', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+    } finally {
+        paying = false;
+    }
+}
+
+// esc / fmtAmount / fmtTime / attrId / errMsg / HashRoute / logoutCurrent 统一由 /js/api.js 提供
+
+if (shopReady) {
+    HashRoute.ensureHome('goods');
+    applyRoute();
+}
 </script>
 </body>
 </html>

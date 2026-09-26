@@ -386,7 +386,7 @@ HTTP 请求取样器的 **Files Upload** 标签页支持模拟文件上传。
 | 配置项 | 说明 |
 | :---: | --- |
 | 服务器名称或 IP | 填 `${host}` 引用变量 |
-| 端口号 | 如 `8080` |
+| 端口号 | 如 `6060`（本项目 server.port=6060） |
 | 协议 | `http` 或 `https` |
 | 编码 | `UTF-8` |
 
@@ -907,16 +907,16 @@ log.info("提取到 token：" + token)
 <img src="https://cdn.nlark.com/yuque/0/2026/png/36048946/1779538157847-6eb699de-7535-47e6-8118-61951cf56244.png" width="700" />
 
 ```plain
-curl.exe ^"http://localhost:8080/api/user/login^" ^
+curl.exe ^"http://localhost:6060/api/user/login^" ^
   -X POST ^
   -H ^"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0^" ^
   -H ^"Accept: */*^" ^
   -H ^"Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5^" ^
   -H ^"Accept-Encoding: gzip, deflate, br, zstd^" ^
-  -H ^"Referer: http://localhost:8080/login.html^" ^
+  -H ^"Referer: http://localhost:6060/login.html^" ^
   -H ^"Content-Type: application/json^" ^
   -H ^"ts: 1779541089610^" ^
-  -H ^"Origin: http://localhost:8080^" ^
+  -H ^"Origin: http://localhost:6060^" ^
   -H ^"Connection: keep-alive^" ^
   -H ^"Sec-Fetch-Dest: empty^" ^
   -H ^"Sec-Fetch-Mode: cors^" ^
@@ -930,12 +930,12 @@ curl.exe ^"http://localhost:8080/api/user/login^" ^
 <img src="https://cdn.nlark.com/yuque/0/2026/png/36048946/1779538201083-f8c87dda-baf8-4058-b718-e91df395136e.png" width="700" />
 
 ```plain
-curl.exe ^"http://localhost:8080/api/goods/list?keyword=^%^E5^%^8D^%^8E^%^E4^%^B8^%^BA^" ^
+curl.exe ^"http://localhost:6060/api/goods/list?keyword=^%^E5^%^8D^%^8E^%^E4^%^B8^%^BA^" ^
   -H ^"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0^" ^
   -H ^"Accept: */*^" ^
   -H ^"Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5^" ^
   -H ^"Accept-Encoding: gzip, deflate, br, zstd^" ^
-  -H ^"Referer: http://localhost:8080/index.html^" ^
+  -H ^"Referer: http://localhost:6060/index.html^" ^
   -H ^"token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIyIiwidXNlcm5hbWUiOiJ0ZXN0MDAxIiwicm9sZSI6MCwiaWF0IjoxNzc5NTQxMDg5LCJleHAiOjE3Nzk1NDQ2ODl9._k6JIcPNxwUThGzB8Upj2bv0yI8j2i8o_HnaNH5yVvY^" ^
   -H ^"Connection: keep-alive^" ^
   -H ^"Sec-Fetch-Dest: empty^" ^
@@ -949,16 +949,16 @@ curl.exe ^"http://localhost:8080/api/goods/list?keyword=^%^E5^%^8D^%^8E^%^E4^%^B
 <img src="https://cdn.nlark.com/yuque/0/2026/png/36048946/1779538222984-dba090b3-e9be-4fcc-abd8-37d4b0636b01.png" width="700" />
 
 ```plain
-curl.exe ^"http://localhost:8080/api/order/buy^" ^
+curl.exe ^"http://localhost:6060/api/order/buy^" ^
   -X POST ^
   -H ^"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0^" ^
   -H ^"Accept: */*^" ^
   -H ^"Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5^" ^
   -H ^"Accept-Encoding: gzip, deflate, br, zstd^" ^
-  -H ^"Referer: http://localhost:8080/index.html^" ^
+  -H ^"Referer: http://localhost:6060/index.html^" ^
   -H ^"Content-Type: application/json^" ^
   -H ^"token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIyIiwidXNlcm5hbWUiOiJ0ZXN0MDAxIiwicm9sZSI6MCwiaWF0IjoxNzc5NTQxMDg5LCJleHAiOjE3Nzk1NDQ2ODl9._k6JIcPNxwUThGzB8Upj2bv0yI8j2i8o_HnaNH5yVvY^" ^
-  -H ^"Origin: http://localhost:8080^" ^
+  -H ^"Origin: http://localhost:6060^" ^
   -H ^"Connection: keep-alive^" ^
   -H ^"Sec-Fetch-Dest: empty^" ^
   -H ^"Sec-Fetch-Mode: cors^" ^
